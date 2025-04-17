@@ -110,6 +110,20 @@ function codegen(input: GenerateRequest): GenerateResponse {
 
   // TODO: Verify options, parse them from protobuf honestly
 
+  // Output the model (table classes)
+  let tableNodes = [];
+
+  for (const table of input.catalog?.schemas?.[0].tables ?? []) {
+    tableNodes.push(tableDecl(table.rel!.name, driver, table.columns));
+  }
+
+  files.push(
+    new File({
+      name: "model_sql.ts",
+      contents: new TextEncoder().encode(printNode(tableNodes)),
+    })
+  );
+
   const querymap = new Map<string, Query[]>();
 
   for (const query of input.queries) {
@@ -274,6 +288,31 @@ function rowDecl(
         factory.createIdentifier(colName(i, column)),
         undefined,
         driver.columnType(column)
+      )
+    )
+  );
+}
+
+function tableDecl(name: string, driver: Driver, columns: Column[]) {
+  const snakeToCamel = (str: string) =>
+    str.replace(/([-_]\w)/g, (g) => g[1].toUpperCase());
+  const snakeToPascal = (str: string) => {
+    let camelCase = snakeToCamel(str);
+    let pascalCase = camelCase[0].toUpperCase() + camelCase.substr(1);
+    return pascalCase;
+  };
+  return factory.createClassDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    factory.createIdentifier(snakeToPascal(name)),
+    undefined,
+    undefined,
+    columns.map((column, i) =>
+      factory.createPropertyDeclaration(
+        undefined,
+        factory.createIdentifier(colName(i, column)),
+        undefined,
+        driver.columnType(column),
+        undefined
       )
     )
   );
