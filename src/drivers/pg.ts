@@ -148,7 +148,10 @@ export class Driver {
         break;
       }
       case "int8": {
-        // string
+        typ = factory.createTypeReferenceNode(
+          factory.createIdentifier("bigint"),
+          undefined
+        );
         break;
       }
       case "interval": {
