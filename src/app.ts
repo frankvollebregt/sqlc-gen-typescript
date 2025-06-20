@@ -32,6 +32,7 @@ import { Driver as Sqlite3Driver } from "./drivers/better-sqlite3";
 import { Driver as PgDriver } from "./drivers/pg";
 import { Driver as PostgresDriver } from "./drivers/postgres";
 import { Mysql2Options, Driver as MysqlDriver } from "./drivers/mysql2";
+import { nestServiceDecl } from "./nest";
 
 // Read input from stdin
 const input = readInput();
@@ -216,7 +217,9 @@ ${query.text}`
         files.push(
           new File({
             name: `${filename.replace(".", "_")}.ts`,
-            contents: new TextEncoder().encode(printNode(nodes)),
+            contents: new TextEncoder().encode(
+              printNode([nestServiceDecl(filename.split(".")[0]), ...nodes])
+            ),
           })
         );
       }
@@ -252,8 +255,8 @@ function queryDecl(name: string, sql: string) {
 }
 
 function argsDecl(
-  name: string,
-  driver: Driver,
+  name: string, 
+  driver: Driver, 
   params: Parameter[]
 ) {
   return factory.createInterfaceDeclaration(
@@ -273,8 +276,8 @@ function argsDecl(
 }
 
 function rowDecl(
-  name: string,
-  driver: Driver,
+  name: string, 
+  driver: Driver, 
   columns: Column[]
 ) {
   return factory.createInterfaceDeclaration(
