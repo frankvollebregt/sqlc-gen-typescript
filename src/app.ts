@@ -5,7 +5,6 @@
 import { readFileSync, writeFileSync, STDIO } from "javy/fs";
 import {
   EmitHint,
-  FunctionDeclaration,
   NewLineKind,
   TypeNode,
   ScriptKind,
@@ -16,6 +15,8 @@ import {
   createPrinter,
   createSourceFile,
   factory,
+  MemberExpression,
+  PropertyDeclaration,
 } from "typescript";
 
 import {
@@ -32,7 +33,11 @@ import { Driver as Sqlite3Driver } from "./drivers/better-sqlite3";
 import { Driver as PgDriver } from "./drivers/pg";
 import { Driver as PostgresDriver } from "./drivers/postgres";
 import { Mysql2Options, Driver as MysqlDriver } from "./drivers/mysql2";
-import { nestServiceDecl } from "./nest";
+import {
+  createNamedImportDeclaration,
+  nestServiceDecl,
+  snakeToPascal,
+} from "./nest";
 
 // Read input from stdin
 const input = readInput();
@@ -44,7 +49,7 @@ writeOutput(result);
 interface Options {
   runtime?: string;
   driver?: string;
-  mysql2?: Mysql2Options
+  mysql2?: Mysql2Options;
 }
 
 interface Driver {
@@ -138,6 +143,9 @@ function codegen(input: GenerateRequest): GenerateResponse {
   for (const [filename, queries] of querymap.entries()) {
     const nodes = driver.preamble(queries);
 
+    // Class members of the Nest service
+    const members = [];
+
     for (const query of queries) {
       const colmap = new Map<string, number>();
       for (let column of query.columns) {
@@ -175,7 +183,7 @@ ${query.text}`
 
       switch (query.cmd) {
         case ":exec": {
-          nodes.push(
+          members.push(
             driver.execDecl(lowerName, textName, argIface, query.params)
           );
           break;
@@ -187,7 +195,7 @@ ${query.text}`
           break;
         }
         case ":one": {
-          nodes.push(
+          members.push(
             driver.oneDecl(
               lowerName,
               textName,
@@ -200,7 +208,7 @@ ${query.text}`
           break;
         }
         case ":many": {
-          nodes.push(
+          members.push(
             driver.manyDecl(
               lowerName,
               textName,
@@ -218,7 +226,12 @@ ${query.text}`
           new File({
             name: `${filename.replace(".", "_")}.ts`,
             contents: new TextEncoder().encode(
-              printNode([nestServiceDecl(filename.split(".")[0]), ...nodes])
+              printNode([
+                // Nodes contains the interface declarations used
+                ...nodes,
+                // The service contains the different query methods
+                nestServiceDecl(filename.split(".")[0], members),
+              ])
             ),
           })
         );
@@ -254,11 +267,7 @@ function queryDecl(name: string, sql: string) {
   );
 }
 
-function argsDecl(
-  name: string, 
-  driver: Driver, 
-  params: Parameter[]
-) {
+function argsDecl(name: string, driver: Driver, params: Parameter[]) {
   return factory.createInterfaceDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
     factory.createIdentifier(name),
@@ -275,11 +284,7 @@ function argsDecl(
   );
 }
 
-function rowDecl(
-  name: string, 
-  driver: Driver, 
-  columns: Column[]
-) {
+function rowDecl(name: string, driver: Driver, columns: Column[]) {
   return factory.createInterfaceDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
     factory.createIdentifier(name),
@@ -297,13 +302,6 @@ function rowDecl(
 }
 
 function tableDecl(name: string, driver: Driver, columns: Column[]) {
-  const snakeToCamel = (str: string) =>
-    str.replace(/([-_]\w)/g, (g) => g[1].toUpperCase());
-  const snakeToPascal = (str: string) => {
-    let camelCase = snakeToCamel(str);
-    let pascalCase = camelCase[0].toUpperCase() + camelCase.substr(1);
-    return pascalCase;
-  };
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
     factory.createIdentifier(snakeToPascal(name)),

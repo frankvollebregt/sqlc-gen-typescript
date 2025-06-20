@@ -5,25 +5,15 @@ import {
   TypeNode,
   factory,
   FunctionDeclaration,
+  MethodDeclaration,
 } from "typescript";
 
 import { Parameter, Column, Query } from "../gen/plugin/codegen_pb";
 import { argName, colName } from "./utlis";
+import { createNamedImportDeclaration } from "../nest";
 
 function funcParamsDecl(iface: string | undefined, params: Parameter[]) {
-  let funcParams = [
-    factory.createParameterDeclaration(
-      undefined,
-      undefined,
-      factory.createIdentifier("client"),
-      undefined,
-      factory.createTypeReferenceNode(
-        factory.createIdentifier("Client"),
-        undefined
-      ),
-      undefined
-    ),
-  ];
+  let funcParams = [];
 
   if (iface && params.length > 0) {
     funcParams.push(
@@ -358,6 +348,7 @@ export class Driver {
         factory.createStringLiteral("pg"),
         undefined
       ),
+      createNamedImportDeclaration(["Injectable"], "@nestjs/common"),
     ];
 
     const hasInterval = queries.some(
@@ -385,6 +376,11 @@ export class Driver {
           undefined
         )
       );
+    }
+
+    if (queries.length > 0) {
+      // Import the CLS service to read the database
+      imports.push(createNamedImportDeclaration(["ClsService"], "nestjs-cls"));
     }
 
     imports.push(
@@ -439,13 +435,11 @@ export class Driver {
   ) {
     const funcParams = funcParamsDecl(argIface, params);
 
-    return factory.createFunctionDeclaration(
-      [
-        factory.createToken(SyntaxKind.ExportKeyword),
-        factory.createToken(SyntaxKind.AsyncKeyword),
-      ],
+    return factory.createMethodDeclaration(
+      [factory.createToken(SyntaxKind.AsyncKeyword)],
       undefined,
       factory.createIdentifier(funcName),
+      undefined,
       undefined,
       funcParams,
       factory.createTypeReferenceNode(factory.createIdentifier("Promise"), [
@@ -457,7 +451,10 @@ export class Driver {
             factory.createAwaitExpression(
               factory.createCallExpression(
                 factory.createPropertyAccessExpression(
-                  factory.createIdentifier("client"),
+                  factory.createPropertyAccessExpression(
+                    factory.createThis(),
+                    factory.createIdentifier("client")
+                  ),
                   factory.createIdentifier("query")
                 ),
                 undefined,
@@ -502,18 +499,16 @@ export class Driver {
     queryName: string,
     argIface: string | undefined,
     returnIface: string,
-    params: Parameter[],
-    columns: Column[]
-  ) {
+    params: any[],
+    columns: any[]
+  ): MethodDeclaration {
     const funcParams = funcParamsDecl(argIface, params);
 
-    return factory.createFunctionDeclaration(
-      [
-        factory.createToken(SyntaxKind.ExportKeyword),
-        factory.createToken(SyntaxKind.AsyncKeyword),
-      ],
+    return factory.createMethodDeclaration(
+      [factory.createToken(SyntaxKind.AsyncKeyword)],
       undefined,
       factory.createIdentifier(funcName),
+      undefined,
       undefined,
       funcParams,
       factory.createTypeReferenceNode(factory.createIdentifier("Promise"), [
@@ -529,59 +524,54 @@ export class Driver {
         [
           factory.createVariableStatement(
             undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  factory.createIdentifier("result"),
-                  undefined,
-                  undefined,
-                  factory.createAwaitExpression(
-                    factory.createCallExpression(
+            factory.createVariableDeclarationList([
+              factory.createVariableDeclaration(
+                factory.createIdentifier("result"),
+                undefined,
+                undefined,
+                factory.createAwaitExpression(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
                       factory.createPropertyAccessExpression(
-                        factory.createIdentifier("client"),
-                        factory.createIdentifier("query")
+                        factory.createThis(),
+                        factory.createIdentifier("client")
                       ),
-                      undefined,
-                      [
-                        factory.createObjectLiteralExpression(
-                          [
-                            factory.createPropertyAssignment(
-                              factory.createIdentifier("text"),
-                              factory.createIdentifier(queryName)
-                            ),
-                            factory.createPropertyAssignment(
-                              factory.createIdentifier("values"),
-                              factory.createArrayLiteralExpression(
-                                params.map((param, i) =>
-                                  factory.createPropertyAccessExpression(
-                                    factory.createIdentifier("args"),
-                                    factory.createIdentifier(
-                                      argName(i, param.column)
-                                    )
+                      factory.createIdentifier("query")
+                    ),
+                    undefined,
+                    [
+                      factory.createObjectLiteralExpression(
+                        [
+                          factory.createPropertyAssignment(
+                            factory.createIdentifier("text"),
+                            factory.createIdentifier(queryName)
+                          ),
+                          factory.createPropertyAssignment(
+                            factory.createIdentifier("values"),
+                            factory.createArrayLiteralExpression(
+                              params.map((param, i) =>
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("args"),
+                                  factory.createIdentifier(
+                                    argName(i, param.column)
                                   )
-                                ),
-                                false
-                              )
-                            ),
-                            factory.createPropertyAssignment(
-                              factory.createIdentifier("rowMode"),
-                              factory.createStringLiteral("array")
-                            ),
-                          ],
-                          true
-                        ),
-                      ]
-                    )
+                                )
+                              ),
+                              false
+                            )
+                          ),
+                          factory.createPropertyAssignment(
+                            factory.createIdentifier("rowMode"),
+                            factory.createStringLiteral("array")
+                          ),
+                        ],
+                        true
+                      ),
+                    ]
                   )
-                ),
-              ],
-              NodeFlags.Const |
-                // ts.NodeFlags.Constant |
-                NodeFlags.AwaitContext |
-                // ts.NodeFlags.Constant |
-                NodeFlags.ContextFlags |
-                NodeFlags.TypeExcludesFlags
-            )
+                )
+              ),
+            ])
           ),
           factory.createIfStatement(
             factory.createBinaryExpression(
@@ -603,28 +593,20 @@ export class Driver {
           ),
           factory.createVariableStatement(
             undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  factory.createIdentifier("row"),
-                  undefined,
-                  undefined,
-                  factory.createElementAccessExpression(
-                    factory.createPropertyAccessExpression(
-                      factory.createIdentifier("result"),
-                      factory.createIdentifier("rows")
-                    ),
-                    factory.createNumericLiteral("0")
-                  )
-                ),
-              ],
-              NodeFlags.Const |
-                // NodeFlags.Constant |
-                NodeFlags.AwaitContext |
-                // NodeFlags.Constant |
-                NodeFlags.ContextFlags |
-                NodeFlags.TypeExcludesFlags
-            )
+            factory.createVariableDeclarationList([
+              factory.createVariableDeclaration(
+                factory.createIdentifier("row"),
+                undefined,
+                undefined,
+                factory.createElementAccessExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createIdentifier("result"),
+                    factory.createIdentifier("rows")
+                  ),
+                  factory.createNumericLiteral("0")
+                )
+              ),
+            ])
           ),
           factory.createReturnStatement(
             factory.createObjectLiteralExpression(
@@ -656,13 +638,11 @@ export class Driver {
   ) {
     const funcParams = funcParamsDecl(argIface, params);
 
-    return factory.createFunctionDeclaration(
-      [
-        factory.createToken(SyntaxKind.ExportKeyword),
-        factory.createToken(SyntaxKind.AsyncKeyword),
-      ],
+    return factory.createMethodDeclaration(
+      [factory.createToken(SyntaxKind.AsyncKeyword)],
       undefined,
       factory.createIdentifier(funcName),
+      undefined,
       undefined,
       funcParams,
       factory.createTypeReferenceNode(factory.createIdentifier("Promise"), [
@@ -677,59 +657,54 @@ export class Driver {
         [
           factory.createVariableStatement(
             undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  factory.createIdentifier("result"),
-                  undefined,
-                  undefined,
-                  factory.createAwaitExpression(
-                    factory.createCallExpression(
+            factory.createVariableDeclarationList([
+              factory.createVariableDeclaration(
+                factory.createIdentifier("result"),
+                undefined,
+                undefined,
+                factory.createAwaitExpression(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
                       factory.createPropertyAccessExpression(
-                        factory.createIdentifier("client"),
-                        factory.createIdentifier("query")
+                        factory.createThis(),
+                        factory.createIdentifier("client")
                       ),
-                      undefined,
-                      [
-                        factory.createObjectLiteralExpression(
-                          [
-                            factory.createPropertyAssignment(
-                              factory.createIdentifier("text"),
-                              factory.createIdentifier(queryName)
-                            ),
-                            factory.createPropertyAssignment(
-                              factory.createIdentifier("values"),
-                              factory.createArrayLiteralExpression(
-                                params.map((param, i) =>
-                                  factory.createPropertyAccessExpression(
-                                    factory.createIdentifier("args"),
-                                    factory.createIdentifier(
-                                      argName(i, param.column)
-                                    )
+                      factory.createIdentifier("query")
+                    ),
+                    undefined,
+                    [
+                      factory.createObjectLiteralExpression(
+                        [
+                          factory.createPropertyAssignment(
+                            factory.createIdentifier("text"),
+                            factory.createIdentifier(queryName)
+                          ),
+                          factory.createPropertyAssignment(
+                            factory.createIdentifier("values"),
+                            factory.createArrayLiteralExpression(
+                              params.map((param, i) =>
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("args"),
+                                  factory.createIdentifier(
+                                    argName(i, param.column)
                                   )
-                                ),
-                                false
-                              )
-                            ),
-                            factory.createPropertyAssignment(
-                              factory.createIdentifier("rowMode"),
-                              factory.createStringLiteral("array")
-                            ),
-                          ],
-                          true
-                        ),
-                      ]
-                    )
+                                )
+                              ),
+                              false
+                            )
+                          ),
+                          factory.createPropertyAssignment(
+                            factory.createIdentifier("rowMode"),
+                            factory.createStringLiteral("array")
+                          ),
+                        ],
+                        true
+                      ),
+                    ]
                   )
-                ),
-              ],
-              NodeFlags.Const |
-                // NodeFlags.Constant |
-                NodeFlags.AwaitContext |
-                // NodeFlags.Constant |
-                NodeFlags.ContextFlags |
-                NodeFlags.TypeExcludesFlags
-            )
+                )
+              ),
+            ])
           ),
           factory.createReturnStatement(
             factory.createCallExpression(
