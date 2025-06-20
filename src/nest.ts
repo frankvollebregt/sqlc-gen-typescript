@@ -4,6 +4,7 @@ import {
   factory,
   GetAccessorDeclaration,
   ImportDeclaration,
+  PropertyAssignment,
   SyntaxKind,
 } from "typescript";
 
@@ -30,7 +31,7 @@ export function nestServiceDecl(
 
   return factory.createClassDeclaration(
     [injectableDecorator, factory.createModifier(SyntaxKind.ExportKeyword)],
-    snakeToPascal(name) + "QueryService",
+    name,
     undefined,
     [],
     [createClsServiceConstructor(), createClientGetter(), ...members]
@@ -117,4 +118,104 @@ export function createNamedImportDeclaration(
     factory.createStringLiteral(moduleName),
     undefined
   );
+}
+
+/**
+ * Generates a Nest.js @Module decorated class.
+ *
+ * @param moduleName The name of the module class (e.g., "GeneratedModule").
+ * @param providers An array of identifiers for the providers to include (e.g., ["MyService"]).
+ * @param controllers An array of identifiers for the controllers.
+ * @param imports An array of identifiers for imported modules.
+ * @param exports An array of identifiers for exported providers/modules.
+ * @returns A ts.ClassDeclaration representing the decorated module.
+ */
+export function generateNestModule(
+  moduleName: string,
+  providers: string[] = [],
+  controllers: string[] = [],
+  imports: string[] = [],
+  exports: string[] = []
+): ClassDeclaration {
+  const moduleProperties: PropertyAssignment[] = [];
+
+  if (providers.length > 0) {
+    moduleProperties.push(
+      factory.createPropertyAssignment(
+        factory.createIdentifier("providers"),
+        factory.createArrayLiteralExpression(
+          providers.map((p) => factory.createIdentifier(p)),
+          false
+        )
+      )
+    );
+  }
+
+  if (controllers.length > 0) {
+    moduleProperties.push(
+      factory.createPropertyAssignment(
+        factory.createIdentifier("controllers"),
+        factory.createArrayLiteralExpression(
+          controllers.map((c) => factory.createIdentifier(c)),
+          false
+        )
+      )
+    );
+  }
+
+  if (imports.length > 0) {
+    moduleProperties.push(
+      factory.createPropertyAssignment(
+        factory.createIdentifier("imports"),
+        factory.createArrayLiteralExpression(
+          imports.map((i) => factory.createIdentifier(i)),
+          false
+        )
+      )
+    );
+  }
+
+  if (exports.length > 0) {
+    moduleProperties.push(
+      factory.createPropertyAssignment(
+        factory.createIdentifier("exports"),
+        factory.createArrayLiteralExpression(
+          exports.map((e) => factory.createIdentifier(e)),
+          false
+        )
+      )
+    );
+  }
+
+  const decoratorArgument = factory.createObjectLiteralExpression(
+    moduleProperties,
+    true
+  );
+
+  const moduleCallExpression = factory.createCallExpression(
+    factory.createIdentifier("Module"),
+    undefined,
+    [decoratorArgument]
+  );
+
+  const moduleDecorator = factory.createDecorator(moduleCallExpression);
+  const moduleClass = factory.createClassDeclaration(
+    [
+      factory.createDecorator(
+        factory.createCallExpression(
+          factory.createIdentifier("Global"),
+          undefined,
+          []
+        )
+      ),
+      moduleDecorator,
+      factory.createToken(SyntaxKind.ExportKeyword),
+    ],
+    factory.createIdentifier(moduleName),
+    undefined,
+    [],
+    []
+  );
+
+  return moduleClass;
 }

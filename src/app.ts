@@ -17,6 +17,7 @@ import {
   factory,
   MemberExpression,
   PropertyDeclaration,
+  ImportDeclaration,
 } from "typescript";
 
 import {
@@ -35,6 +36,7 @@ import { Driver as PostgresDriver } from "./drivers/postgres";
 import { Mysql2Options, Driver as MysqlDriver } from "./drivers/mysql2";
 import {
   createNamedImportDeclaration,
+  generateNestModule,
   nestServiceDecl,
   snakeToPascal,
 } from "./nest";
@@ -140,6 +142,10 @@ function codegen(input: GenerateRequest): GenerateResponse {
     qs?.push(query);
   }
 
+  // Imports and services for the SqlcModule
+  var imports = new Set<string>();
+  var serviceNames = new Set<string>();
+
   for (const [filename, queries] of querymap.entries()) {
     const nodes = driver.preamble(queries);
 
@@ -222,22 +228,59 @@ ${query.text}`
         }
       }
       if (nodes) {
+        const filenameNoExt = filename.substring(0, filename.lastIndexOf("."));
+        const fileName = `${filenameNoExt.replace("_", "-")}-query.service.g`;
+
+        // The service name is the pascal-case version of the filename, with QueryService added
+        const serviceName =
+          snakeToPascal(filename.substring(0, filename.lastIndexOf("."))) +
+          "QueryService";
+
+        // // The service name and file name, for importing them in the module
+        // const serviceName =
+        //   snakeToPascal(filenameNoExt.replace(".", "_")) + "QueryService";
+
         files.push(
           new File({
-            name: `${filename.replace(".", "_")}.ts`,
+            name: fileName + ".ts",
             contents: new TextEncoder().encode(
               printNode([
                 // Nodes contains the interface declarations used
                 ...nodes,
                 // The service contains the different query methods
-                nestServiceDecl(filename.split(".")[0], members),
+                nestServiceDecl(serviceName, members),
               ])
             ),
           })
         );
+
+        // Add the import line
+        imports.add(fileName);
+        // The service name, to be used in the module
+        serviceNames.add(serviceName);
       }
     }
   }
+
+  // Finally, generate the module class
+  var moduleNodes: Node[] = [
+    createNamedImportDeclaration(["Global", "Module"], "@nestjs/common"),
+    ...Array.from(imports).map((i) =>
+      createNamedImportDeclaration(
+        // Remove the '.g' part
+        [snakeToPascal(i.substring(0, i.length - 2))],
+        `./${i}`
+      )
+    ),
+    generateNestModule("SqlcModule", Array.from(serviceNames)),
+  ];
+
+  files.push(
+    new File({
+      name: "sqlc.module.g.ts",
+      contents: new TextEncoder().encode(printNode(moduleNodes)),
+    })
+  );
 
   return new GenerateResponse({
     files: files,
