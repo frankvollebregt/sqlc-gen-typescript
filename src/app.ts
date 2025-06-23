@@ -127,7 +127,7 @@ function codegen(input: GenerateRequest): GenerateResponse {
 
   files.push(
     new File({
-      name: "model_sql.ts",
+      name: "model.ts",
       contents: new TextEncoder().encode(printNode(tableNodes)),
     })
   );
