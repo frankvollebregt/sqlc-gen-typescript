@@ -268,7 +268,7 @@ ${query.text}`
     ...Array.from(imports).map((i) =>
       createNamedImportDeclaration(
         // Remove the '.g' part
-        [snakeToPascal(i.substring(0, i.length - 2))],
+        [snakeToPascal(i.substring(0, i.length - 2).replace(".", "_"))],
         `./${i}`
       )
     ),
