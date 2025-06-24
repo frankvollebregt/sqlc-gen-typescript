@@ -272,7 +272,13 @@ ${query.text}`
         `./${i}`
       )
     ),
-    generateNestModule("SqlcModule", Array.from(serviceNames)),
+    generateNestModule(
+      "SqlcModule",
+      Array.from(serviceNames),
+      undefined,
+      undefined,
+      Array.from(serviceNames)
+    ),
   ];
 
   files.push(
