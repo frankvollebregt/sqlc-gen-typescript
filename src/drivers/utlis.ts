@@ -4,15 +4,20 @@ import { Column } from "../gen/plugin/codegen_pb";
 export function fieldName(
   prefix: string,
   index: number,
-  column?: Column
+  column?: Column,
+  convertCamelCase: boolean = true,
 ): string {
   let name = `${prefix}_${index}`;
   if (column) {
     name = column.name;
   }
+  if (convertCamelCase) {
   return name
     .toLowerCase()
     .replace(/([_][a-z])/g, (group) => group.toUpperCase().replace("_", ""));
+  } else {
+    return name;
+  }
 }
 
 export function argName(index: number, column?: Column): string {
@@ -20,5 +25,5 @@ export function argName(index: number, column?: Column): string {
 }
 
 export function colName(index: number, column?: Column): string {
-  return fieldName("col", index, column);
+  return fieldName("col", index, column, false);
 }
