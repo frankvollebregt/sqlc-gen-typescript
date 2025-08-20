@@ -762,20 +762,57 @@ export class Driver {
     if (col.type?.name == "int8") {
       // It's a BigInt, return the value parsed as a bigint!
       if (col.notNull) {
-        // Not nullable --> BigInt(row[i])
-        return factory.createPropertyAssignment(
-          factory.createIdentifier(colName(i, col)),
-          factory.createCallExpression(
-            factory.createIdentifier("BigInt"),
-            undefined,
-            [
-              factory.createElementAccessExpression(
-                factory.createIdentifier("row"),
-                factory.createNumericLiteral(`${i}`)
+        if (col.isArray) {
+          // Not nullable array --> .map((e) => BigInt(e))
+          return factory.createPropertyAssignment(
+            factory.createIdentifier(colName(i, col)),
+            factory.createCallExpression(
+              factory.createPropertyAccessExpression(
+                factory.createElementAccessExpression(
+                  factory.createIdentifier("row"),
+                  factory.createNumericLiteral(`${i}`)
+                ),
+                factory.createIdentifier("map")
               ),
-            ]
+              undefined,
+              [
+                factory.createArrowFunction(
+                  undefined,
+                  undefined,
+                  [
+                    factory.createParameterDeclaration(
+                      undefined,
+                      undefined,
+                      factory.createIdentifier("e")
+                    )
+                  ],
+                  undefined,
+                  factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                  factory.createCallExpression(
+                    factory.createIdentifier("BigInt"),
+                    undefined,
+                    [factory.createIdentifier("e")]
+                  )
+                )
+              ]
+            )
           )
-        );
+        } else {
+          // Not nullable value --> BigInt(row[i])
+          return factory.createPropertyAssignment(
+            factory.createIdentifier(colName(i, col)),
+            factory.createCallExpression(
+              factory.createIdentifier("BigInt"),
+              undefined,
+              [
+                factory.createElementAccessExpression(
+                  factory.createIdentifier("row"),
+                  factory.createNumericLiteral(`${i}`)
+                ),
+              ]
+            )
+          );
+        }
       } else {
         // Nullable --> row[i] != null ? BigInt(row[i]) : null
         return factory.createPropertyAssignment(
