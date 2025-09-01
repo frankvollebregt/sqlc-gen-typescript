@@ -1,4 +1,9 @@
-import ts, { Expression, factory, Node, SyntaxKind } from "typescript";
+import ts, {
+  Expression,
+  factory,
+  Node,
+  SyntaxKind,
+} from "typescript";
 import { Driver } from "./app";
 import { Column, Table } from "./gen/plugin/codegen_pb";
 import {
@@ -15,7 +20,9 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
   let nodes: Node[] = [];
 
   nodes.push(createNamedImportDeclaration(["Injectable"], "@nestjs/common"));
-  nodes.push(createNamedImportDeclaration(["PartialType"], "@nestjs/swagger"));
+  nodes.push(
+    createNamedImportDeclaration(["PartialType", "OmitType"], "@nestjs/swagger")
+  );
 
   const imports = new Set<string>(["IsDefined", "IsOptional"]);
 
@@ -34,6 +41,10 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
 
   nodes.push(
     createNamedImportDeclaration(["IsBigInt"], "src/validators/env.validator")
+  );
+
+  nodes.push(
+    createNamedImportDeclaration(["QueryArrayConfig", "QueryArrayResult"], "pg")
   );
 
   nodes.push(
@@ -179,6 +190,7 @@ function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
   const companionIdentifier = factory.createIdentifier(
     snakeToPascal(tableName) + "Companion"
   );
+  const hasId = columns.map((col) => col.name).includes(tableName + "id");
 
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
@@ -190,7 +202,20 @@ function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
           factory.createCallExpression(
             factory.createIdentifier("PartialType"),
             undefined,
-            [identifier]
+            hasId
+              ? [
+                  factory.createCallExpression(
+                    factory.createIdentifier("OmitType"),
+                    undefined,
+                    [
+                      identifier,
+                      factory.createArrayLiteralExpression([
+                        factory.createStringLiteral(tableName + "id"),
+                      ]),
+                    ]
+                  ),
+                ]
+              : [identifier]
           ),
           undefined
         ),
@@ -201,7 +226,7 @@ function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
       .filter((col) => col.name === tableName + "id")
       .map((column, i) =>
         factory.createPropertyDeclaration(
-          undefined,
+          columnDecoratorsDecl(column, new Set()),
           factory.createIdentifier(colName(i, column)),
           undefined,
           driver.columnType(column),
@@ -389,7 +414,10 @@ function getQueryString(table: Table): string {
     .filter((col) => col.name !== tableName + "id")
     .map((col) => {
       const name = col.name;
-      return `${name} = CASE WHEN data ? '${name}' THEN data->>'${name}' ELSE ${name} END`;
+      const type = col.type?.name;
+      return `${name} = CASE WHEN data ? '${name}' THEN (data->>'${name}')::${
+        type ?? "TEXT"
+      } ELSE ${name} END`;
     });
 
   return `WITH input AS (SELECT $1::jsonb AS data) UPDATE ${tableName} SET ${updateLines.join(

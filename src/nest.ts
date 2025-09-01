@@ -112,7 +112,7 @@ export function createNamedImportDeclaration(
             undefined,
             factory.createIdentifier(name)
           )
-        )
+        ),
       )
     ),
     factory.createStringLiteral(moduleName),
@@ -145,7 +145,7 @@ export function generateNestModule(
         factory.createIdentifier("providers"),
         factory.createArrayLiteralExpression(
           providers.map((p) => factory.createIdentifier(p)),
-          false
+          true
         )
       )
     );
@@ -157,7 +157,7 @@ export function generateNestModule(
         factory.createIdentifier("controllers"),
         factory.createArrayLiteralExpression(
           controllers.map((c) => factory.createIdentifier(c)),
-          false
+          true
         )
       )
     );
@@ -169,7 +169,7 @@ export function generateNestModule(
         factory.createIdentifier("imports"),
         factory.createArrayLiteralExpression(
           imports.map((i) => factory.createIdentifier(i)),
-          false
+          true
         )
       )
     );
@@ -181,7 +181,7 @@ export function generateNestModule(
         factory.createIdentifier("exports"),
         factory.createArrayLiteralExpression(
           exports.map((e) => factory.createIdentifier(e)),
-          false
+          true
         )
       )
     );
