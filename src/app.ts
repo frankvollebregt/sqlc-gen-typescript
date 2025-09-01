@@ -15,9 +15,6 @@ import {
   createPrinter,
   createSourceFile,
   factory,
-  MemberExpression,
-  PropertyDeclaration,
-  ImportDeclaration,
 } from "typescript";
 
 import {
@@ -40,6 +37,7 @@ import {
   nestServiceDecl,
   snakeToPascal,
 } from "./nest";
+import { crudDecl } from "./crud";
 
 // Read input from stdin
 const input = readInput();
@@ -54,7 +52,7 @@ interface Options {
   mysql2?: Mysql2Options;
 }
 
-interface Driver {
+export interface Driver {
   preamble: (queries: Query[]) => Node[];
   columnType: (c?: Column) => TypeNode;
   execDecl: (
@@ -118,19 +116,17 @@ function codegen(input: GenerateRequest): GenerateResponse {
 
   // TODO: Verify options, parse them from protobuf honestly
 
-  // Output the model (table classes)
-  let tableNodes = [];
+  const tables = input.catalog?.schemas?.[0].tables;
+  if (tables != null) {
+    const crudNodes = crudDecl(driver, tables);
 
-  for (const table of input.catalog?.schemas?.[0].tables ?? []) {
-    tableNodes.push(tableDecl(table.rel!.name, driver, table.columns));
+    files.push(
+      new File({
+        name: "crud.service.g.ts",
+        contents: new TextEncoder().encode(printNode(crudNodes)),
+      })
+    );
   }
-
-  files.push(
-    new File({
-      name: "model.g.ts",
-      contents: new TextEncoder().encode(printNode(tableNodes)),
-    })
-  );
 
   const querymap = new Map<string, Query[]>();
 
@@ -144,7 +140,7 @@ function codegen(input: GenerateRequest): GenerateResponse {
 
   // Imports and services for the SqlcModule
   var imports = new Set<string>();
-  var serviceNames = new Set<string>();
+  var serviceNames = new Set<string>(['CrudService']);
 
   for (const [filename, queries] of querymap.entries()) {
     const nodes = driver.preamble(queries);
@@ -345,24 +341,6 @@ function rowDecl(name: string, driver: Driver, columns: Column[]) {
         factory.createIdentifier(colName(i, column)),
         undefined,
         driver.columnType(column)
-      )
-    )
-  );
-}
-
-function tableDecl(name: string, driver: Driver, columns: Column[]) {
-  return factory.createClassDeclaration(
-    [factory.createToken(SyntaxKind.ExportKeyword)],
-    factory.createIdentifier(snakeToPascal(name)),
-    undefined,
-    undefined,
-    columns.map((column, i) =>
-      factory.createPropertyDeclaration(
-        undefined,
-        factory.createIdentifier(colName(i, column)),
-        undefined,
-        driver.columnType(column),
-        undefined
       )
     )
   );

@@ -8,7 +8,7 @@ import {
   SyntaxKind,
 } from "typescript";
 
-const snakeToCamel = (str: string) =>
+export const snakeToCamel = (str: string) =>
   str.replace(/([-_]\w)/g, (g) => g[1].toUpperCase());
 export const snakeToPascal = (str: string) => {
   let camelCase = snakeToCamel(str);
