@@ -1,9 +1,4 @@
-import ts, {
-  Expression,
-  factory,
-  Node,
-  SyntaxKind,
-} from "typescript";
+import ts, { Expression, factory, Node, SyntaxKind } from "typescript";
 import { Driver } from "./app";
 import { Column, Table } from "./gen/plugin/codegen_pb";
 import {
@@ -13,6 +8,19 @@ import {
   snakeToPascal,
 } from "./nest";
 import { colName } from "./drivers/utlis";
+import { mapReturnColumnsWithBigInt } from "./bigint";
+
+const excludedColumns = [
+  "userid",
+  "log_actiesid",
+  "tijd_vanaf",
+  "importid",
+  "import_uuid",
+  "tenantid",
+];
+
+const excludedFilter = (column: Column) =>
+  !excludedColumns.includes(column.name);
 
 /** Output the table models and simple CRUD functions for them */
 export function crudDecl(driver: Driver, tables: Table[]): Node[] {
@@ -117,15 +125,17 @@ function tableDecl(
     factory.createIdentifier(snakeToPascal(name)),
     undefined,
     undefined,
-    columns.map((column, i) =>
-      factory.createPropertyDeclaration(
-        columnDecoratorsDecl(column, imports),
-        factory.createIdentifier(colName(i, column)),
-        undefined,
-        driver.columnType(column),
-        undefined
+    columns
+      .filter(excludedFilter)
+      .map((column, i) =>
+        factory.createPropertyDeclaration(
+          columnDecoratorsDecl(column, imports),
+          factory.createIdentifier(colName(i, column)),
+          undefined,
+          driver.columnType(column),
+          undefined
+        )
       )
-    )
   );
 }
 
@@ -191,6 +201,16 @@ function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
     snakeToPascal(tableName) + "Companion"
   );
   const hasId = columns.map((col) => col.name).includes(tableName + "id");
+  const hasUuid = columns.map((col) => col.name).includes(tableName + "_uuid");
+
+  const omits = [];
+
+  if (hasId) {
+    omits.push(factory.createStringLiteral(tableName + "id"));
+  }
+  if (hasUuid) {
+    omits.push(factory.createStringLiteral(tableName + "_uuid"));
+  }
 
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
@@ -202,17 +222,12 @@ function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
           factory.createCallExpression(
             factory.createIdentifier("PartialType"),
             undefined,
-            hasId
+            omits.length > 0
               ? [
                   factory.createCallExpression(
                     factory.createIdentifier("OmitType"),
                     undefined,
-                    [
-                      identifier,
-                      factory.createArrayLiteralExpression([
-                        factory.createStringLiteral(tableName + "id"),
-                      ]),
-                    ]
+                    [identifier, factory.createArrayLiteralExpression(omits)]
                   ),
                 ]
               : [identifier]
@@ -308,105 +323,515 @@ function crudTableDecl(table: Table): Expression {
     snakeToPascal(tableName) + "Companion"
   );
   return factory.createObjectLiteralExpression(
-    [
-      factory.createPropertyAssignment(
-        "update",
-        factory.createArrowFunction(
-          [factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
-          undefined,
-          [
-            factory.createParameterDeclaration(
-              undefined,
-              undefined,
-              "entry",
-              undefined,
-              factory.createTypeReferenceNode(companionIdentifier)
-            ),
-          ],
-          factory.createTypeReferenceNode("Promise", [
-            factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
-          ]),
-          factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
-          ts.factory.createBlock(
-            [
-              // The query
-              ts.factory.createVariableStatement(
-                undefined,
-                ts.factory.createVariableDeclarationList(
-                  [
-                    ts.factory.createVariableDeclaration(
-                      "query",
-                      undefined,
-                      undefined,
-                      ts.factory.createStringLiteral(getQueryString(table))
-                    ),
-                  ],
-                  ts.NodeFlags.Const
-                )
-              ),
-
-              // Logging
-
-              // Running the query
-              factory.createExpressionStatement(
-                factory.createAwaitExpression(
-                  factory.createCallExpression(
-                    factory.createPropertyAccessExpression(
-                      factory.createPropertyAccessExpression(
-                        factory.createThis(),
-                        factory.createIdentifier("client")
-                      ),
-                      factory.createIdentifier("query")
-                    ),
-                    undefined,
-                    [
-                      factory.createObjectLiteralExpression(
-                        [
-                          factory.createPropertyAssignment(
-                            "text",
-                            factory.createIdentifier("query")
-                          ),
-                          factory.createPropertyAssignment(
-                            "values",
-                            factory.createArrayLiteralExpression([
-                              factory.createCallExpression(
-                                factory.createPropertyAccessExpression(
-                                  factory.createIdentifier("JSON"),
-                                  "stringify"
-                                ),
-                                undefined,
-                                [
-                                  factory.createIdentifier("entry"),
-                                  factory.createPropertyAccessExpression(
-                                    factory.createThis(),
-                                    factory.createIdentifier("replacer")
-                                  ),
-                                ]
-                              ),
-                            ])
-                          ),
-                          factory.createPropertyAssignment(
-                            "rowMode",
-                            factory.createStringLiteral("array")
-                          ),
-                        ],
-                        true
-                      ),
-                    ]
-                  )
-                )
-              ),
-            ],
-            true
-          )
-        )
-      ),
-    ],
+    [getUpdateMethod(table, companionIdentifier), getSelectMethod(table), getDeleteMethod(table)],
     true
   );
 }
 
-function getQueryString(table: Table): string {
+function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
+  return factory.createPropertyAssignment(
+    "update",
+    factory.createArrowFunction(
+      [factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
+      undefined,
+      [
+        factory.createParameterDeclaration(
+          undefined,
+          undefined,
+          "entry",
+          undefined,
+          factory.createTypeReferenceNode(companionIdentifier)
+        ),
+      ],
+      factory.createTypeReferenceNode("Promise", [
+        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
+      ]),
+      factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+      ts.factory.createBlock(
+        [
+          // The query
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "query",
+                  undefined,
+                  undefined,
+                  ts.factory.createStringLiteral(getUpdateQueryString(table))
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
+          // Running the query
+          factory.createExpressionStatement(
+            factory.createAwaitExpression(
+              factory.createCallExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createThis(),
+                    factory.createIdentifier("client")
+                  ),
+                  factory.createIdentifier("query")
+                ),
+                undefined,
+                [
+                  factory.createObjectLiteralExpression(
+                    [
+                      factory.createPropertyAssignment(
+                        "text",
+                        factory.createIdentifier("query")
+                      ),
+                      factory.createPropertyAssignment(
+                        "values",
+                        factory.createArrayLiteralExpression([
+                          factory.createCallExpression(
+                            factory.createPropertyAccessExpression(
+                              factory.createIdentifier("JSON"),
+                              "stringify"
+                            ),
+                            undefined,
+                            [
+                              factory.createIdentifier("entry"),
+                              factory.createPropertyAccessExpression(
+                                factory.createThis(),
+                                factory.createIdentifier("replacer")
+                              ),
+                            ]
+                          ),
+                        ])
+                      ),
+                      factory.createPropertyAssignment(
+                        "rowMode",
+                        factory.createStringLiteral("array")
+                      ),
+                    ],
+                    true
+                  ),
+                ]
+              )
+            )
+          ),
+        ],
+        true
+      )
+    )
+  );
+}
+
+function getUpdateQueryString(table: Table): string {
+  const tableName = table.rel!.name;
+
+  // Create update statements for all columns (except the primary key)
+  const updateLines = table.columns
+    .filter((col) => col.name !== tableName + "id")
+    .map((col) => {
+      const name = col.name;
+      const type = col.type?.name;
+      return `${name} = CASE WHEN data ? '${name}' THEN (data->>'${name}')::${
+        type ?? "TEXT"
+      } ELSE ${name} END`;
+    });
+
+  return `WITH input AS (SELECT $1::jsonb AS data) UPDATE ${tableName} SET ${updateLines.join(
+    ", "
+  )} FROM input WHERE ${tableName}.${tableName}id = (data->>'${tableName}id')::bigint;`;
+}
+
+function getSelectMethod(table: Table) {
+  const tableName = table.rel!.name;
+  const idName = snakeToCamel(tableName + "id");
+
+  // Only accept included columns
+  const columns = table.columns.filter(excludedFilter);
+
+  return factory.createPropertyAssignment(
+    "select",
+    factory.createArrowFunction(
+      [factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
+      undefined,
+      [
+        factory.createParameterDeclaration(
+          undefined,
+          undefined,
+          idName,
+          undefined,
+          factory.createUnionTypeNode([
+            factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+            factory.createArrayTypeNode(
+              factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
+            ),
+          ])
+        ),
+      ],
+      factory.createTypeReferenceNode("Promise", [
+        factory.createArrayTypeNode(
+          factory.createTypeReferenceNode(snakeToPascal(tableName))
+        ),
+      ]),
+      factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+      ts.factory.createBlock(
+        [
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  ts.factory.createIdentifier("arr"),
+                  undefined,
+                  undefined,
+                  ts.factory.createConditionalExpression(
+                    ts.factory.createCallExpression(
+                      ts.factory.createPropertyAccessExpression(
+                        ts.factory.createIdentifier("Array"),
+                        ts.factory.createIdentifier("isArray")
+                      ),
+                      undefined,
+                      [ts.factory.createIdentifier(idName)]
+                    ),
+                    ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+                    ts.factory.createIdentifier(idName),
+                    ts.factory.createToken(ts.SyntaxKind.ColonToken),
+                    ts.factory.createArrayLiteralExpression(
+                      [ts.factory.createIdentifier(idName)],
+                      false
+                    )
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+          // The query
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "query",
+                  undefined,
+                  undefined,
+                  ts.factory.createStringLiteral(
+                    getSelectQueryString(table, columns)
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
+          // Running the query
+          factory.createVariableStatement(undefined, [
+            factory.createVariableDeclaration(
+              "result",
+              undefined,
+              undefined,
+              factory.createAwaitExpression(
+                factory.createCallExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createThis(),
+                      factory.createIdentifier("client")
+                    ),
+                    factory.createIdentifier("query")
+                  ),
+                  undefined,
+                  [
+                    factory.createObjectLiteralExpression(
+                      [
+                        factory.createPropertyAssignment(
+                          "text",
+                          factory.createIdentifier("query")
+                        ),
+                        factory.createPropertyAssignment(
+                          "values",
+                          factory.createArrayLiteralExpression([
+                            factory.createIdentifier("arr"),
+                          ])
+                        ),
+                        factory.createPropertyAssignment(
+                          "rowMode",
+                          factory.createStringLiteral("array")
+                        ),
+                      ],
+                      true
+                    ),
+                  ]
+                )
+              )
+            ),
+          ]),
+          factory.createReturnStatement(
+            factory.createCallExpression(
+              factory.createPropertyAccessExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createIdentifier("result"),
+                  factory.createIdentifier("rows")
+                ),
+                factory.createIdentifier("map")
+              ),
+              undefined,
+              [
+                factory.createArrowFunction(
+                  undefined,
+                  undefined,
+                  [
+                    factory.createParameterDeclaration(
+                      undefined,
+                      undefined,
+                      factory.createIdentifier("row"),
+                      undefined,
+                      undefined,
+                      undefined
+                    ),
+                  ],
+                  undefined,
+                  factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                  factory.createBlock(
+                    [
+                      factory.createReturnStatement(
+                        factory.createObjectLiteralExpression(
+                          columns.map(mapReturnColumnsWithBigInt),
+                          true
+                        )
+                      ),
+                    ],
+                    true
+                  )
+                ),
+              ]
+            )
+          ),
+        ],
+        true
+      )
+    )
+  );
+}
+
+function getSelectQueryString(table: Table, columns: Column[]): string {
+  const tableName = table.rel!.name;
+  return `SELECT ${columns
+    .map((col) => col.name)
+    .join(", ")} FROM ${tableName} WHERE ${tableName}id = ANY($1)`;
+}
+
+function getDeleteMethod(table: Table) {
+  const tableName = table.rel!.name;
+  const idName = snakeToCamel(tableName + "id");
+  return factory.createPropertyAssignment(
+    "delete",
+    factory.createArrowFunction(
+      [factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
+      undefined,
+      [
+        factory.createParameterDeclaration(
+          undefined,
+          undefined,
+          idName,
+          undefined,
+          factory.createUnionTypeNode([
+            factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+            factory.createArrayTypeNode(
+              factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
+            ),
+          ])
+        ),
+      ],
+      factory.createTypeReferenceNode("Promise", [
+        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
+      ]),
+      factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+      ts.factory.createBlock(
+        [
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  ts.factory.createIdentifier("arr"),
+                  undefined,
+                  undefined,
+                  ts.factory.createConditionalExpression(
+                    ts.factory.createCallExpression(
+                      ts.factory.createPropertyAccessExpression(
+                        ts.factory.createIdentifier("Array"),
+                        ts.factory.createIdentifier("isArray")
+                      ),
+                      undefined,
+                      [ts.factory.createIdentifier(idName)]
+                    ),
+                    ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+                    ts.factory.createIdentifier(idName),
+                    ts.factory.createToken(ts.SyntaxKind.ColonToken),
+                    ts.factory.createArrayLiteralExpression(
+                      [ts.factory.createIdentifier(idName)],
+                      false
+                    )
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+          // The query
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "query",
+                  undefined,
+                  undefined,
+                  ts.factory.createStringLiteral(
+                    `DELETE FROM ${tableName} WHERE ${tableName}id = ANY($1);`
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
+          // Running the query
+
+          factory.createExpressionStatement(
+            factory.createAwaitExpression(
+              factory.createCallExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createThis(),
+                    factory.createIdentifier("client")
+                  ),
+                  factory.createIdentifier("query")
+                ),
+                undefined,
+                [
+                  factory.createObjectLiteralExpression(
+                    [
+                      factory.createPropertyAssignment(
+                        "text",
+                        factory.createIdentifier("query")
+                      ),
+                      factory.createPropertyAssignment(
+                        "values",
+                        factory.createArrayLiteralExpression([
+                          factory.createIdentifier("arr"),
+                        ])
+                      ),
+                      factory.createPropertyAssignment(
+                        "rowMode",
+                        factory.createStringLiteral("array")
+                      ),
+                    ],
+                    true
+                  ),
+                ]
+              )
+            )
+          ),
+        ],
+        true
+      )
+    )
+  );
+}
+
+function getInsertMethod(table: Table, companionIdentifier: ts.Identifier) {
+  return factory.createPropertyAssignment(
+    "insert",
+    factory.createArrowFunction(
+      [factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
+      undefined,
+      [
+        factory.createParameterDeclaration(
+          undefined,
+          undefined,
+          "entry",
+          undefined,
+          factory.createTypeReferenceNode(companionIdentifier)
+        ),
+      ],
+      factory.createTypeReferenceNode("Promise", [
+        factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+      ]),
+      factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+      ts.factory.createBlock(
+        [
+          // The query
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "query",
+                  undefined,
+                  undefined,
+                  ts.factory.createStringLiteral(getUpdateQueryString(table))
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
+          // Running the query
+          factory.createExpressionStatement(
+            factory.createAwaitExpression(
+              factory.createCallExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createThis(),
+                    factory.createIdentifier("client")
+                  ),
+                  factory.createIdentifier("query")
+                ),
+                undefined,
+                [
+                  factory.createObjectLiteralExpression(
+                    [
+                      factory.createPropertyAssignment(
+                        "text",
+                        factory.createIdentifier("query")
+                      ),
+                      factory.createPropertyAssignment(
+                        "values",
+                        factory.createArrayLiteralExpression([
+                          factory.createCallExpression(
+                            factory.createPropertyAccessExpression(
+                              factory.createIdentifier("JSON"),
+                              "stringify"
+                            ),
+                            undefined,
+                            [
+                              factory.createIdentifier("entry"),
+                              factory.createPropertyAccessExpression(
+                                factory.createThis(),
+                                factory.createIdentifier("replacer")
+                              ),
+                            ]
+                          ),
+                        ])
+                      ),
+                      factory.createPropertyAssignment(
+                        "rowMode",
+                        factory.createStringLiteral("array")
+                      ),
+                    ],
+                    true
+                  ),
+                ]
+              )
+            )
+          ),
+        ],
+        true
+      )
+    )
+  );
+}
+
+function getInsertQueryString(table: Table): string {
   const tableName = table.rel!.name;
 
   // Create update statements for all columns (except the primary key)

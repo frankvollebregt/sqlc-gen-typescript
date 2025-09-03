@@ -11,6 +11,7 @@ import {
 import { Parameter, Column, Query } from "../gen/plugin/codegen_pb";
 import { argName, colName } from "./utlis";
 import { createNamedImportDeclaration } from "../nest";
+import { mapReturnColumnsWithBigInt } from "../bigint";
 
 function funcParamsDecl(iface: string | undefined, params: Parameter[]) {
   let funcParams = [];
@@ -610,7 +611,7 @@ export class Driver {
           ),
           factory.createReturnStatement(
             factory.createObjectLiteralExpression(
-              columns.map(this.mapReturnColumnsWithBigInt),
+              columns.map(mapReturnColumnsWithBigInt),
               true
             )
           ),
@@ -728,7 +729,7 @@ export class Driver {
                     [
                       factory.createReturnStatement(
                         factory.createObjectLiteralExpression(
-                          columns.map(this.mapReturnColumnsWithBigInt),
+                          columns.map(mapReturnColumnsWithBigInt),
                           true
                         )
                       ),
@@ -752,67 +753,5 @@ export class Driver {
     params: Parameter[]
   ): FunctionDeclaration {
     throw new Error("pg driver currently does not support :execlastid");
-  }
-
-  /**
-   * Map the columns in the returned value so that they are parsed to actual
-   * BigInt objects in Typescript
-   */
-  mapReturnColumnsWithBigInt(col: Column, i: number) {
-    if (col.type?.name == "int8") {
-      // It's a BigInt, return the value parsed as a bigint!
-      if (col.notNull) {
-        // Not nullable --> BigInt(row[i])
-        return factory.createPropertyAssignment(
-          factory.createIdentifier(colName(i, col)),
-          factory.createCallExpression(
-            factory.createIdentifier("BigInt"),
-            undefined,
-            [
-              factory.createElementAccessExpression(
-                factory.createIdentifier("row"),
-                factory.createNumericLiteral(`${i}`)
-              ),
-            ]
-          )
-        );
-      } else {
-        // Nullable --> row[i] != null ? BigInt(row[i]) : null
-        return factory.createPropertyAssignment(
-          factory.createIdentifier(colName(i, col)),
-          factory.createConditionalExpression(
-            factory.createBinaryExpression(
-              factory.createElementAccessExpression(
-                factory.createIdentifier("row"),
-                factory.createNumericLiteral(`${i}`)
-              ),
-              factory.createToken(SyntaxKind.ExclamationEqualsToken),
-              factory.createNull()
-            ),
-            factory.createToken(SyntaxKind.QuestionToken),
-            factory.createCallExpression(
-              factory.createIdentifier("BigInt"),
-              undefined,
-              [
-                factory.createElementAccessExpression(
-                  factory.createIdentifier("row"),
-                  factory.createNumericLiteral(`${i}`)
-                ),
-              ]
-            ),
-            factory.createToken(SyntaxKind.ColonToken),
-            factory.createNull()
-          )
-        );
-      }
-    } else {
-      return factory.createPropertyAssignment(
-        factory.createIdentifier(colName(i, col)),
-        factory.createElementAccessExpression(
-          factory.createIdentifier("row"),
-          factory.createNumericLiteral(`${i}`)
-        )
-      );
-    }
   }
 }
