@@ -338,9 +338,12 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
         factory.createParameterDeclaration(
           undefined,
           undefined,
-          "entry",
+          "entries",
           undefined,
-          factory.createTypeReferenceNode(companionIdentifier)
+          factory.createUnionTypeNode([
+            factory.createTypeReferenceNode(companionIdentifier),
+            factory.createArrayTypeNode(factory.createTypeReferenceNode(companionIdentifier)),
+          ])
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
@@ -349,6 +352,37 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
+          // Ensure entries is always an array
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "arr",
+                  undefined,
+                  undefined,
+                  ts.factory.createConditionalExpression(
+                    ts.factory.createCallExpression(
+                      ts.factory.createPropertyAccessExpression(
+                        ts.factory.createIdentifier("Array"),
+                        ts.factory.createIdentifier("isArray")
+                      ),
+                      undefined,
+                      [ts.factory.createIdentifier("entries")]
+                    ),
+                    ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+                    ts.factory.createIdentifier("entries"),
+                    ts.factory.createToken(ts.SyntaxKind.ColonToken),
+                    ts.factory.createArrayLiteralExpression(
+                      [ts.factory.createIdentifier("entries")],
+                      false
+                    )
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
           // The query
           ts.factory.createVariableStatement(
             undefined,
@@ -364,54 +398,73 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
               ts.NodeFlags.Const
             )
           ),
-
-          // Running the query
-          factory.createExpressionStatement(
-            factory.createAwaitExpression(
-              factory.createCallExpression(
-                factory.createPropertyAccessExpression(
-                  factory.createPropertyAccessExpression(
-                    factory.createThis(),
-                    factory.createIdentifier("client")
-                  ),
-                  factory.createIdentifier("query")
+          // Loop over each entry and update
+          ts.factory.createForOfStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  ts.factory.createIdentifier("entry"),
+                  undefined,
+                  undefined,
+                  undefined
                 ),
-                undefined,
-                [
-                  factory.createObjectLiteralExpression(
-                    [
-                      factory.createPropertyAssignment(
-                        "text",
+              ],
+              ts.NodeFlags.Const
+            ),
+            ts.factory.createIdentifier("arr"),
+            ts.factory.createBlock(
+              [
+                factory.createExpressionStatement(
+                  factory.createAwaitExpression(
+                    factory.createCallExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createPropertyAccessExpression(
+                          factory.createThis(),
+                          factory.createIdentifier("client")
+                        ),
                         factory.createIdentifier("query")
                       ),
-                      factory.createPropertyAssignment(
-                        "values",
-                        factory.createArrayLiteralExpression([
-                          factory.createCallExpression(
-                            factory.createPropertyAccessExpression(
-                              factory.createIdentifier("JSON"),
-                              "stringify"
+                      undefined,
+                      [
+                        factory.createObjectLiteralExpression(
+                          [
+                            factory.createPropertyAssignment(
+                              "text",
+                              factory.createIdentifier("query")
                             ),
-                            undefined,
-                            [
-                              factory.createIdentifier("entry"),
-                              factory.createPropertyAccessExpression(
-                                factory.createThis(),
-                                factory.createIdentifier("replacer")
-                              ),
-                            ]
-                          ),
-                        ])
-                      ),
-                      factory.createPropertyAssignment(
-                        "rowMode",
-                        factory.createStringLiteral("array")
-                      ),
-                    ],
-                    true
-                  ),
-                ]
-              )
+                            factory.createPropertyAssignment(
+                              "values",
+                              factory.createArrayLiteralExpression([
+                                factory.createCallExpression(
+                                  factory.createPropertyAccessExpression(
+                                    factory.createIdentifier("JSON"),
+                                    "stringify"
+                                  ),
+                                  undefined,
+                                  [
+                                    factory.createIdentifier("entry"),
+                                    factory.createPropertyAccessExpression(
+                                      factory.createThis(),
+                                      factory.createIdentifier("replacer")
+                                    ),
+                                  ]
+                                ),
+                              ])
+                            ),
+                            factory.createPropertyAssignment(
+                              "rowMode",
+                              factory.createStringLiteral("array")
+                            ),
+                          ],
+                          true
+                        ),
+                      ]
+                    )
+                  )
+                ),
+              ],
+              true
             )
           ),
         ],
@@ -695,7 +748,6 @@ function getDeleteMethod(table: Table) {
           ),
 
           // Running the query
-
           factory.createExpressionStatement(
             factory.createAwaitExpression(
               factory.createCallExpression(
