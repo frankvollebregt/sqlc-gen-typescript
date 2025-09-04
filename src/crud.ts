@@ -37,7 +37,8 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
   const tableNodes = [];
   for (const table of tables) {
     tableNodes.push(tableDecl(table.rel!.name, driver, table.columns, imports));
-    tableNodes.push(companionDecl(table.rel!.name, driver, table.columns));
+    tableNodes.push(insertableDecl(table.rel!.name, table.columns));
+    tableNodes.push(updateableDecl(table.rel!.name, driver, table.columns));
   }
 
   nodes.push(createNamedImportDeclaration(["ClsService"], "nestjs-cls"));
@@ -195,26 +196,23 @@ function decoratorDecl(name: string) {
   );
 }
 
-function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
+function insertableDecl(tableName: string, columns: Column[]) {
   const identifier = factory.createIdentifier(snakeToPascal(tableName));
-  const companionIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Companion"
+  const insertableIdentifier = factory.createIdentifier(
+    snakeToPascal(tableName) + "Insertable"
   );
+
   const hasId = columns.map((col) => col.name).includes(tableName + "id");
-  const hasUuid = columns.map((col) => col.name).includes(tableName + "_uuid");
 
   const omits = [];
 
   if (hasId) {
     omits.push(factory.createStringLiteral(tableName + "id"));
   }
-  if (hasUuid) {
-    omits.push(factory.createStringLiteral(tableName + "_uuid"));
-  }
 
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
-    companionIdentifier,
+    insertableIdentifier,
     undefined,
     [
       factory.createHeritageClause(ts.SyntaxKind.ExtendsKeyword, [
@@ -232,6 +230,30 @@ function companionDecl(tableName: string, driver: Driver, columns: Column[]) {
                 ]
               : [identifier]
           ),
+          undefined
+        ),
+      ]),
+    ],
+    []
+  );
+}
+
+function updateableDecl(tableName: string, driver: Driver, columns: Column[]) {
+  const updateableIdentifier = factory.createIdentifier(
+    snakeToPascal(tableName) + "Updateable"
+  );
+  const insertableIdentifier = factory.createIdentifier(
+    snakeToPascal(tableName) + "Insertable"
+  );
+
+  return factory.createClassDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    updateableIdentifier,
+    undefined,
+    [
+      factory.createHeritageClause(ts.SyntaxKind.ExtendsKeyword, [
+        factory.createExpressionWithTypeArguments(
+          insertableIdentifier,
           undefined
         ),
       ]),
@@ -318,12 +340,19 @@ function replacerMethodDecl(): ts.MethodDeclaration {
 
 function crudTableDecl(table: Table): Expression {
   const tableName = table.rel!.name;
-  const identifier = factory.createIdentifier(snakeToPascal(tableName));
-  const companionIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Companion"
+  const updateableIdentifier = factory.createIdentifier(
+    snakeToPascal(tableName) + "Updateable"
+  );
+  const insertableIdentifier = factory.createIdentifier(
+    snakeToPascal(tableName) + "Insertable"
   );
   return factory.createObjectLiteralExpression(
-    [getUpdateMethod(table, companionIdentifier), getSelectMethod(table), getDeleteMethod(table)],
+    [
+      getUpdateMethod(table, updateableIdentifier),
+      getSelectMethod(table),
+      getDeleteMethod(table),
+      getInsertMethod(table, insertableIdentifier),
+    ],
     true
   );
 }
@@ -342,7 +371,9 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
           undefined,
           factory.createUnionTypeNode([
             factory.createTypeReferenceNode(companionIdentifier),
-            factory.createArrayTypeNode(factory.createTypeReferenceNode(companionIdentifier)),
+            factory.createArrayTypeNode(
+              factory.createTypeReferenceNode(companionIdentifier)
+            ),
           ])
         ),
       ],
@@ -480,6 +511,7 @@ function getUpdateQueryString(table: Table): string {
   // Create update statements for all columns (except the primary key)
   const updateLines = table.columns
     .filter((col) => col.name !== tableName + "id")
+    .filter(excludedFilter)
     .map((col) => {
       const name = col.name;
       const type = col.type?.name;
@@ -790,7 +822,11 @@ function getDeleteMethod(table: Table) {
   );
 }
 
-function getInsertMethod(table: Table, companionIdentifier: ts.Identifier) {
+function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
+  const tableName = table.rel!.name;
+
+  // The insert method takes in a PartialType of the table class, omitting the primary key
+  // It passes this as a JSONB object to the query
   return factory.createPropertyAssignment(
     "insert",
     factory.createArrowFunction(
@@ -802,15 +838,68 @@ function getInsertMethod(table: Table, companionIdentifier: ts.Identifier) {
           undefined,
           "entry",
           undefined,
-          factory.createTypeReferenceNode(companionIdentifier)
+          factory.createTypeReferenceNode(insertableIdentifier)
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
-        factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
+          // The column names that are actually present
+          // const columnNames = Object.getOwnPropertyNames(entry);
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "columnNames",
+                  undefined,
+                  undefined,
+                  ts.factory.createCallExpression(
+                    ts.factory.createPropertyAccessExpression(
+                      ts.factory.createIdentifier("Object"),
+                      "getOwnPropertyNames"
+                    ),
+                    undefined,
+                    [ts.factory.createIdentifier("entry")]
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+          // Create a template String to insert the column names
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "columnNamesStr",
+                  undefined,
+                  undefined,
+                  factory.createTemplateExpression(
+                    factory.createTemplateHead(`INSERT INTO ${tableName} (`),
+                    [
+                      factory.createTemplateSpan(
+                        factory.createCallExpression(
+                          factory.createPropertyAccessExpression(
+                            factory.createIdentifier("columnNames"),
+                            "join"
+                          ),
+                          undefined,
+                          [factory.createStringLiteral(", ")]
+                        ),
+                        factory.createTemplateTail(") VALUES (")
+                      ),
+                    ]
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
           // The query
           ts.factory.createVariableStatement(
             undefined,
@@ -820,13 +909,12 @@ function getInsertMethod(table: Table, companionIdentifier: ts.Identifier) {
                   "query",
                   undefined,
                   undefined,
-                  ts.factory.createStringLiteral(getUpdateQueryString(table))
+                  ts.factory.createStringLiteral(getInsertQueryString(table))
                 ),
               ],
               ts.NodeFlags.Const
             )
           ),
-
           // Running the query
           factory.createExpressionStatement(
             factory.createAwaitExpression(
@@ -885,19 +973,28 @@ function getInsertMethod(table: Table, companionIdentifier: ts.Identifier) {
 
 function getInsertQueryString(table: Table): string {
   const tableName = table.rel!.name;
-
-  // Create update statements for all columns (except the primary key)
-  const updateLines = table.columns
+  const columns = table.columns
     .filter((col) => col.name !== tableName + "id")
-    .map((col) => {
-      const name = col.name;
-      const type = col.type?.name;
-      return `${name} = CASE WHEN data ? '${name}' THEN (data->>'${name}')::${
-        type ?? "TEXT"
-      } ELSE ${name} END`;
-    });
+    .filter(excludedFilter);
 
-  return `WITH input AS (SELECT $1::jsonb AS data) UPDATE ${tableName} SET ${updateLines.join(
+  const columnNames = columns.map((col) => col.name);
+
+  const columnMapping = columns.map((col) => {
+    const name = col.name;
+    const type = col.type?.name;
+
+    return `${name} ${type ?? "TEXT"} DEFAULT`;
+
+    // // If it is passed, cast it to the right type, otherwise use DEFAULT
+    // return `CASE WHEN data ? '${name}' THEN (data->>'${name}')::${
+    //     type ?? "TEXT"
+    //   } ELSE DEFAULT END`;
+  });
+
+  // Build the insert statement using jsonb_to_record
+  return `WITH input AS (SELECT $1::jsonb AS data) INSERT INTO ${tableName} (${columnNames.join(
     ", "
-  )} FROM input WHERE ${tableName}.${tableName}id = (data->>'${tableName}id')::bigint;`;
+  )}) SELECT * FROM jsonb_to_record(input.data) AS x(${columnMapping.join(
+    ", "
+  )});`;
 }
