@@ -181,6 +181,11 @@ function columnDecoratorsDecl(
         decorators.push(decoratorDecl("IsInt"));
         imports.add("IsInt");
         break;
+      case "timestamptz":
+      case "timestamp":
+        decorators.push(decoratorDecl("IsISO8601"));
+        imports.add("IsISO8601");
+        break;
     }
   }
   return decorators;
@@ -825,6 +830,17 @@ function getDeleteMethod(table: Table) {
 function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
   const tableName = table.rel!.name;
 
+  const columnTypes = new Map<string, string>(
+    table.columns
+      .filter((col) => col.name !== tableName + "id")
+      .filter(excludedFilter)
+      .map((col) => {
+        const name = col.name;
+        const type = col.type?.name;
+        return [name, type ?? "TEXT"];
+      })
+  );
+
   // The insert method takes in a PartialType of the table class, omitting the primary key
   // It passes this as a JSONB object to the query
   return factory.createPropertyAssignment(
@@ -847,51 +863,27 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
-          // The column names that are actually present
-          // const columnNames = Object.getOwnPropertyNames(entry);
+          // Define the columnTypes map
           ts.factory.createVariableStatement(
             undefined,
             ts.factory.createVariableDeclarationList(
               [
                 ts.factory.createVariableDeclaration(
-                  "columnNames",
+                  "columnTypes",
                   undefined,
                   undefined,
-                  ts.factory.createCallExpression(
-                    ts.factory.createPropertyAccessExpression(
-                      ts.factory.createIdentifier("Object"),
-                      "getOwnPropertyNames"
-                    ),
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier("Map"),
                     undefined,
-                    [ts.factory.createIdentifier("entry")]
-                  )
-                ),
-              ],
-              ts.NodeFlags.Const
-            )
-          ),
-          // Create a template String to insert the column names
-          ts.factory.createVariableStatement(
-            undefined,
-            ts.factory.createVariableDeclarationList(
-              [
-                ts.factory.createVariableDeclaration(
-                  "columnNamesStr",
-                  undefined,
-                  undefined,
-                  factory.createTemplateExpression(
-                    factory.createTemplateHead(`INSERT INTO ${tableName} (`),
                     [
-                      factory.createTemplateSpan(
-                        factory.createCallExpression(
-                          factory.createPropertyAccessExpression(
-                            factory.createIdentifier("columnNames"),
-                            "join"
-                          ),
-                          undefined,
-                          [factory.createStringLiteral(", ")]
+                      ts.factory.createArrayLiteralExpression(
+                        Array.from(columnTypes).map(([name, type]) =>
+                          ts.factory.createArrayLiteralExpression([
+                            ts.factory.createStringLiteral(name),
+                            ts.factory.createStringLiteral(type),
+                          ])
                         ),
-                        factory.createTemplateTail(") VALUES (")
+                        true
                       ),
                     ]
                   )
@@ -900,7 +892,69 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
               ts.NodeFlags.Const
             )
           ),
-          // The query
+          // The columnTypes map, filtered on names that are actually present
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "filteredColumnTypes",
+                  undefined,
+                  undefined,
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier("Map"),
+                    undefined,
+                    [
+                      ts.factory.createCallExpression(
+                        ts.factory.createPropertyAccessExpression(
+                          ts.factory.createCallExpression(
+                            ts.factory.createPropertyAccessExpression(
+                              ts.factory.createIdentifier("Object"),
+                              "getOwnPropertyNames"
+                            ),
+                            undefined,
+                            [ts.factory.createIdentifier("entry")]
+                          ),
+                          "map"
+                        ),
+                        undefined,
+                        [
+                          ts.factory.createArrowFunction(
+                            undefined,
+                            undefined,
+                            [
+                              ts.factory.createParameterDeclaration(
+                                undefined,
+                                undefined,
+                                "name"
+                              ),
+                            ],
+                            undefined,
+                            ts.factory.createToken(
+                              ts.SyntaxKind.EqualsGreaterThanToken
+                            ),
+                            ts.factory.createArrayLiteralExpression([
+                              ts.factory.createIdentifier("name"),
+                              ts.factory.createCallExpression(
+                                ts.factory.createPropertyAccessExpression(
+                                  ts.factory.createIdentifier("columnTypes"),
+                                  "get"
+                                ),
+                                undefined,
+                                [ts.factory.createIdentifier("name")]
+                              ),
+                            ])
+                          ),
+                        ]
+                      ),
+                    ]
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+          // Create the query
           ts.factory.createVariableStatement(
             undefined,
             ts.factory.createVariableDeclarationList(
@@ -909,7 +963,118 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                   "query",
                   undefined,
                   undefined,
-                  ts.factory.createStringLiteral(getInsertQueryString(table))
+                  factory.createTemplateExpression(
+                    factory.createTemplateHead(
+                      `WITH input AS (SELECT $1::jsonb AS data) INSERT INTO ${tableName} (`
+                    ),
+                    [
+                      factory.createTemplateSpan(
+                        factory.createCallExpression(
+                          factory.createPropertyAccessExpression(
+                            factory.createCallExpression(
+                              factory.createPropertyAccessExpression(
+                                factory.createIdentifier("Array"),
+                                "from"
+                              ),
+                              undefined,
+                              [
+                                factory.createCallExpression(
+                                  factory.createPropertyAccessExpression(
+                                    factory.createIdentifier(
+                                      "filteredColumnTypes"
+                                    ),
+                                    "keys"
+                                  ),
+                                  undefined,
+                                  undefined
+                                ),
+                              ]
+                            ),
+                            "join"
+                          ),
+                          undefined,
+                          [factory.createStringLiteral(", ")]
+                        ),
+                        factory.createTemplateMiddle(") SELECT ")
+                      ),
+                      factory.createTemplateSpan(
+                        ts.factory.createCallExpression(
+                          ts.factory.createPropertyAccessExpression(
+                            factory.createCallExpression(
+                              factory.createPropertyAccessExpression(
+                                factory.createIdentifier("Array"),
+                                "from"
+                              ),
+                              undefined,
+                              [
+                                ts.factory.createCallExpression(
+                                  ts.factory.createPropertyAccessExpression(
+                                    ts.factory.createIdentifier(
+                                      "filteredColumnTypes"
+                                    ),
+                                    ts.factory.createIdentifier("entries")
+                                  ),
+                                  undefined,
+                                  []
+                                ),
+                              ]
+                            ),
+                            ts.factory.createIdentifier("map")
+                          ),
+                          undefined,
+                          [
+                            ts.factory.createArrowFunction(
+                              undefined,
+                              undefined,
+                              [
+                                ts.factory.createParameterDeclaration(
+                                  undefined,
+                                  undefined,
+
+                                  ts.factory.createArrayBindingPattern([
+                                    ts.factory.createBindingElement(
+                                      undefined,
+                                      undefined,
+                                      "name"
+                                    ),
+                                    ts.factory.createBindingElement(
+                                      undefined,
+                                      undefined,
+                                      "type"
+                                    ),
+                                  ])
+                                ),
+                              ],
+                              undefined,
+                              ts.factory.createToken(
+                                ts.SyntaxKind.EqualsGreaterThanToken
+                              ),
+                              ts.factory.createTemplateExpression(
+                                ts.factory.createTemplateHead("(data->>'"),
+                                [
+                                  ts.factory.createTemplateSpan(
+                                    ts.factory.createIdentifier("name"),
+                                    ts.factory.createTemplateMiddle("')::")
+                                  ),
+                                  ts.factory.createTemplateSpan(
+                                    ts.factory.createBinaryExpression(
+                                      ts.factory.createIdentifier("type"),
+                                      ts.factory.createToken(
+                                        ts.SyntaxKind.QuestionQuestionToken
+                                      ),
+                                      ts.factory.createStringLiteral("TEXT")
+                                    ),
+                                    ts.factory.createTemplateTail("")
+                                  ),
+                                ]
+                              )
+                            ),
+                          ]
+                        ),
+                        factory.createTemplateTail(" FROM input;")
+                      ),
+                    ]
+                  )
                 ),
               ],
               ts.NodeFlags.Const
@@ -971,30 +1136,32 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
   );
 }
 
-function getInsertQueryString(table: Table): string {
-  const tableName = table.rel!.name;
-  const columns = table.columns
-    .filter((col) => col.name !== tableName + "id")
-    .filter(excludedFilter);
-
-  const columnNames = columns.map((col) => col.name);
-
-  const columnMapping = columns.map((col) => {
-    const name = col.name;
-    const type = col.type?.name;
-
-    return `${name} ${type ?? "TEXT"} DEFAULT`;
-
-    // // If it is passed, cast it to the right type, otherwise use DEFAULT
-    // return `CASE WHEN data ? '${name}' THEN (data->>'${name}')::${
-    //     type ?? "TEXT"
-    //   } ELSE DEFAULT END`;
-  });
-
-  // Build the insert statement using jsonb_to_record
-  return `WITH input AS (SELECT $1::jsonb AS data) INSERT INTO ${tableName} (${columnNames.join(
-    ", "
-  )}) SELECT * FROM jsonb_to_record(input.data) AS x(${columnMapping.join(
-    ", "
-  )});`;
+function getTryCatch(statements: ts.Statement[]) {
+  return ts.factory.createTryStatement(
+    // try block
+    ts.factory.createBlock(statements, true),
+    // catch clause
+    ts.factory.createCatchClause(
+      ts.factory.createVariableDeclaration(ts.factory.createIdentifier("e")),
+      ts.factory.createBlock(
+        [
+          ts.factory.createThrowStatement(
+            ts.factory.createNewExpression(
+              ts.factory.createIdentifier("InternalServerErrorException"),
+              undefined,
+              [
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier("e"),
+                  ts.factory.createIdentifier("message")
+                ),
+              ]
+            )
+          ),
+        ],
+        true
+      )
+    ),
+    // finally block (none)
+    undefined
+  );
 }
