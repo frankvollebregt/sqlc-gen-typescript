@@ -771,7 +771,7 @@ function getDeleteMethod(table: Table) {
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
-        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
+        factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
@@ -825,39 +825,55 @@ function getDeleteMethod(table: Table) {
           ),
 
           // Running the query
-          factory.createExpressionStatement(
-            factory.createAwaitExpression(
-              factory.createCallExpression(
-                factory.createPropertyAccessExpression(
+          factory.createVariableStatement(undefined, [
+            factory.createVariableDeclaration(
+              "result",
+              undefined,
+              undefined,
+              factory.createAwaitExpression(
+                factory.createCallExpression(
                   factory.createPropertyAccessExpression(
-                    factory.createThis(),
-                    factory.createIdentifier("client")
+                    factory.createPropertyAccessExpression(
+                      factory.createThis(),
+                      factory.createIdentifier("client")
+                    ),
+                    factory.createIdentifier("query")
                   ),
-                  factory.createIdentifier("query")
-                ),
-                undefined,
-                [
-                  factory.createObjectLiteralExpression(
-                    [
-                      factory.createPropertyAssignment(
-                        "text",
-                        factory.createIdentifier("query")
-                      ),
-                      factory.createPropertyAssignment(
-                        "values",
-                        factory.createArrayLiteralExpression([
-                          factory.createIdentifier("arr"),
-                        ])
-                      ),
-                      factory.createPropertyAssignment(
-                        "rowMode",
-                        factory.createStringLiteral("array")
-                      ),
-                    ],
-                    true
-                  ),
-                ]
+                  undefined,
+                  [
+                    factory.createObjectLiteralExpression(
+                      [
+                        factory.createPropertyAssignment(
+                          "text",
+                          factory.createIdentifier("query")
+                        ),
+                        factory.createPropertyAssignment(
+                          "values",
+                          factory.createArrayLiteralExpression([
+                            factory.createIdentifier("arr"),
+                          ])
+                        ),
+                        factory.createPropertyAssignment(
+                          "rowMode",
+                          factory.createStringLiteral("array")
+                        ),
+                      ],
+                      true
+                    ),
+                  ]
+                )
               )
+            ),
+          ]),
+          // return result.rowCount ?? 0
+          factory.createReturnStatement(
+            factory.createBinaryExpression(
+              factory.createPropertyAccessExpression(
+                factory.createIdentifier("result"),
+                factory.createIdentifier("rowCount")
+              ),
+              ts.SyntaxKind.QuestionQuestionToken,
+              factory.createNumericLiteral("0")
             )
           ),
         ],
