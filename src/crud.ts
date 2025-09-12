@@ -383,7 +383,7 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
-        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
+        factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
@@ -434,6 +434,21 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
               ts.NodeFlags.Const
             )
           ),
+          // let rowCount = 0;
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "rowCount",
+                  undefined,
+                  undefined,
+                  ts.factory.createNumericLiteral("0")
+                ),
+              ],
+              ts.NodeFlags.Let
+            )
+          ),
           // Loop over each entry and update
           ts.factory.createForOfStatement(
             undefined,
@@ -451,51 +466,74 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
             ts.factory.createIdentifier("arr"),
             ts.factory.createBlock(
               [
-                factory.createExpressionStatement(
-                  factory.createAwaitExpression(
-                    factory.createCallExpression(
-                      factory.createPropertyAccessExpression(
-                        factory.createPropertyAccessExpression(
-                          factory.createThis(),
-                          factory.createIdentifier("client")
-                        ),
-                        factory.createIdentifier("query")
-                      ),
+                factory.createVariableStatement(
+                  undefined,
+                  ts.factory.createVariableDeclarationList([
+                    ts.factory.createVariableDeclaration(
+                      "result",
                       undefined,
-                      [
-                        factory.createObjectLiteralExpression(
+                      undefined,
+                      factory.createAwaitExpression(
+                        factory.createCallExpression(
+                          factory.createPropertyAccessExpression(
+                            factory.createPropertyAccessExpression(
+                              factory.createThis(),
+                              factory.createIdentifier("client")
+                            ),
+                            factory.createIdentifier("query")
+                          ),
+                          undefined,
                           [
-                            factory.createPropertyAssignment(
-                              "text",
-                              factory.createIdentifier("query")
-                            ),
-                            factory.createPropertyAssignment(
-                              "values",
-                              factory.createArrayLiteralExpression([
-                                factory.createCallExpression(
-                                  factory.createPropertyAccessExpression(
-                                    factory.createIdentifier("JSON"),
-                                    "stringify"
-                                  ),
-                                  undefined,
-                                  [
-                                    factory.createIdentifier("entry"),
-                                    factory.createPropertyAccessExpression(
-                                      factory.createThis(),
-                                      factory.createIdentifier("replacer")
-                                    ),
-                                  ]
+                            factory.createObjectLiteralExpression(
+                              [
+                                factory.createPropertyAssignment(
+                                  "text",
+                                  factory.createIdentifier("query")
                                 ),
-                              ])
+                                factory.createPropertyAssignment(
+                                  "values",
+                                  factory.createArrayLiteralExpression([
+                                    factory.createCallExpression(
+                                      factory.createPropertyAccessExpression(
+                                        factory.createIdentifier("JSON"),
+                                        "stringify"
+                                      ),
+                                      undefined,
+                                      [
+                                        factory.createIdentifier("entry"),
+                                        factory.createPropertyAccessExpression(
+                                          factory.createThis(),
+                                          factory.createIdentifier("replacer")
+                                        ),
+                                      ]
+                                    ),
+                                  ])
+                                ),
+                                factory.createPropertyAssignment(
+                                  "rowMode",
+                                  factory.createStringLiteral("array")
+                                ),
+                              ],
+                              true
                             ),
-                            factory.createPropertyAssignment(
-                              "rowMode",
-                              factory.createStringLiteral("array")
-                            ),
-                          ],
-                          true
-                        ),
-                      ]
+                          ]
+                        )
+                      )
+                    ),
+                  ])
+                ),
+                factory.createExpressionStatement(
+                  factory.createBinaryExpression(
+                    factory.createIdentifier("rowCount"),
+                    ts.SyntaxKind.PlusEqualsToken,
+                    // result.rowCount ?? 0
+                    factory.createBinaryExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("result"),
+                        factory.createIdentifier("rowCount")
+                      ),
+                      ts.SyntaxKind.QuestionQuestionToken,
+                      factory.createNumericLiteral("0")
                     )
                   )
                 ),
@@ -503,6 +541,8 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
               true
             )
           ),
+          // return rowCount
+          factory.createReturnStatement(factory.createIdentifier("rowCount")),
         ],
         true
       )
@@ -731,7 +771,7 @@ function getDeleteMethod(table: Table) {
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
-        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
+        factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
@@ -785,39 +825,55 @@ function getDeleteMethod(table: Table) {
           ),
 
           // Running the query
-          factory.createExpressionStatement(
-            factory.createAwaitExpression(
-              factory.createCallExpression(
-                factory.createPropertyAccessExpression(
+          factory.createVariableStatement(undefined, [
+            factory.createVariableDeclaration(
+              "result",
+              undefined,
+              undefined,
+              factory.createAwaitExpression(
+                factory.createCallExpression(
                   factory.createPropertyAccessExpression(
-                    factory.createThis(),
-                    factory.createIdentifier("client")
+                    factory.createPropertyAccessExpression(
+                      factory.createThis(),
+                      factory.createIdentifier("client")
+                    ),
+                    factory.createIdentifier("query")
                   ),
-                  factory.createIdentifier("query")
-                ),
-                undefined,
-                [
-                  factory.createObjectLiteralExpression(
-                    [
-                      factory.createPropertyAssignment(
-                        "text",
-                        factory.createIdentifier("query")
-                      ),
-                      factory.createPropertyAssignment(
-                        "values",
-                        factory.createArrayLiteralExpression([
-                          factory.createIdentifier("arr"),
-                        ])
-                      ),
-                      factory.createPropertyAssignment(
-                        "rowMode",
-                        factory.createStringLiteral("array")
-                      ),
-                    ],
-                    true
-                  ),
-                ]
+                  undefined,
+                  [
+                    factory.createObjectLiteralExpression(
+                      [
+                        factory.createPropertyAssignment(
+                          "text",
+                          factory.createIdentifier("query")
+                        ),
+                        factory.createPropertyAssignment(
+                          "values",
+                          factory.createArrayLiteralExpression([
+                            factory.createIdentifier("arr"),
+                          ])
+                        ),
+                        factory.createPropertyAssignment(
+                          "rowMode",
+                          factory.createStringLiteral("array")
+                        ),
+                      ],
+                      true
+                    ),
+                  ]
+                )
               )
+            ),
+          ]),
+          // return result.rowCount ?? 0
+          factory.createReturnStatement(
+            factory.createBinaryExpression(
+              factory.createPropertyAccessExpression(
+                factory.createIdentifier("result"),
+                factory.createIdentifier("rowCount")
+              ),
+              ts.SyntaxKind.QuestionQuestionToken,
+              factory.createNumericLiteral("0")
             )
           ),
         ],
@@ -858,7 +914,9 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
-        factory.createKeywordTypeNode(SyntaxKind.VoidKeyword),
+        factory.createArrayTypeNode(
+          factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
+        ),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
@@ -1071,7 +1129,9 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                             ),
                           ]
                         ),
-                        factory.createTemplateTail(" FROM input;")
+                        factory.createTemplateTail(
+                          ` FROM input RETURNING ${tableName}id;`
+                        )
                       ),
                     ]
                   )
@@ -1081,52 +1141,108 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
             )
           ),
           // Running the query
-          factory.createExpressionStatement(
-            factory.createAwaitExpression(
-              factory.createCallExpression(
-                factory.createPropertyAccessExpression(
-                  factory.createPropertyAccessExpression(
-                    factory.createThis(),
-                    factory.createIdentifier("client")
-                  ),
-                  factory.createIdentifier("query")
-                ),
+          factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList([
+              ts.factory.createVariableDeclaration(
+                "result",
                 undefined,
-                [
-                  factory.createObjectLiteralExpression(
+                undefined,
+                factory.createAwaitExpression(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createThis(),
+                        factory.createIdentifier("client")
+                      ),
+                      factory.createIdentifier("query")
+                    ),
+                    undefined,
                     [
-                      factory.createPropertyAssignment(
-                        "text",
-                        factory.createIdentifier("query")
-                      ),
-                      factory.createPropertyAssignment(
-                        "values",
-                        factory.createArrayLiteralExpression([
-                          factory.createCallExpression(
-                            factory.createPropertyAccessExpression(
-                              factory.createIdentifier("JSON"),
-                              "stringify"
-                            ),
-                            undefined,
-                            [
-                              factory.createIdentifier("entry"),
-                              factory.createPropertyAccessExpression(
-                                factory.createThis(),
-                                factory.createIdentifier("replacer")
-                              ),
-                            ]
+                      factory.createObjectLiteralExpression(
+                        [
+                          factory.createPropertyAssignment(
+                            "text",
+                            factory.createIdentifier("query")
                           ),
-                        ])
+                          factory.createPropertyAssignment(
+                            "values",
+                            factory.createArrayLiteralExpression([
+                              factory.createCallExpression(
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("JSON"),
+                                  "stringify"
+                                ),
+                                undefined,
+                                [
+                                  factory.createIdentifier("entry"),
+                                  factory.createPropertyAccessExpression(
+                                    factory.createThis(),
+                                    factory.createIdentifier("replacer")
+                                  ),
+                                ]
+                              ),
+                            ])
+                          ),
+                          factory.createPropertyAssignment(
+                            "rowMode",
+                            factory.createStringLiteral("array")
+                          ),
+                        ],
+                        true
                       ),
-                      factory.createPropertyAssignment(
-                        "rowMode",
-                        factory.createStringLiteral("array")
+                    ]
+                  )
+                )
+              ),
+            ])
+          ),
+          // Return the inserted ids
+          factory.createReturnStatement(
+            factory.createCallExpression(
+              factory.createPropertyAccessExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createIdentifier("result"),
+                  factory.createIdentifier("rows")
+                ),
+                factory.createIdentifier("map")
+              ),
+              undefined,
+              [
+                factory.createArrowFunction(
+                  undefined,
+                  undefined,
+                  [
+                    factory.createParameterDeclaration(
+                      undefined,
+                      undefined,
+                      factory.createIdentifier("row"),
+                      undefined,
+                      undefined,
+                      undefined
+                    ),
+                  ],
+                  undefined,
+                  factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                  factory.createBlock(
+                    [
+                      factory.createReturnStatement(
+                        factory.createCallExpression(
+                          factory.createIdentifier("BigInt"),
+                          undefined,
+                          [
+                            factory.createElementAccessExpression(
+                              factory.createIdentifier("row"),
+                              factory.createNumericLiteral("0")
+                            ),
+                          ]
+                        )
                       ),
                     ],
                     true
-                  ),
-                ]
-              )
+                  )
+                ),
+              ]
             )
           ),
         ],
