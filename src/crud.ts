@@ -651,7 +651,7 @@ function getSelectMethod(table: Table) {
                             factory.createIdentifier("filter"),
                             factory.createIdentifier("prop")
                           ),
-                          ts.SyntaxKind.ExclamationEqualsEqualsToken,
+                          ts.SyntaxKind.ExclamationEqualsToken,
                           factory.createNull()
                         )
                       ),
