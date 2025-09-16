@@ -32,13 +32,19 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
     createNamedImportDeclaration(["PartialType", "OmitType"], "@nestjs/swagger")
   );
 
-  const imports = new Set<string>(["IsDefined", "IsOptional"]);
+  const imports = new Set<string>([
+    "ValidationOptions",
+    "IsDefined",
+    "IsOptional",
+    "IsArray",
+  ]);
 
   const tableNodes = [];
   for (const table of tables) {
     tableNodes.push(tableDecl(table.rel!.name, driver, table.columns, imports));
     tableNodes.push(insertableDecl(table.rel!.name, table.columns));
     tableNodes.push(updateableDecl(table.rel!.name, driver, table.columns));
+    tableNodes.push(filterDecl(table.rel!.name, driver, table.columns));
   }
 
   nodes.push(createNamedImportDeclaration(["ClsService"], "nestjs-cls"));
@@ -140,6 +146,34 @@ function tableDecl(
   );
 }
 
+function decoratorForTypeName(typeName: string, imports: Set<string>) {
+  switch (typeName) {
+    case "int8":
+      // IsBigInt is always imported, from local/shared package
+      return "IsBigInt";
+    case "bool":
+      imports.add("IsBoolean");
+      return "IsBoolean";
+    case "text":
+      imports.add("IsString");
+      return "IsString";
+    case "float4":
+    case "float8":
+      imports.add("IsNumber");
+      return "IsNumber";
+    case "int2":
+    case "int4":
+      imports.add("IsInt");
+      return "IsInt";
+    case "timestamptz":
+    case "timestamp":
+      imports.add("IsISO8601");
+      return "IsISO8601";
+    default:
+      return null;
+  }
+}
+
 function columnDecoratorsDecl(
   column: Column,
   imports: Set<string>
@@ -158,45 +192,21 @@ function columnDecoratorsDecl(
     }
 
     // For certain types, add additional decorators to validate the actual type
-    switch (typeName) {
-      case "int8":
-        decorators.push(decoratorDecl("IsBigInt"));
-        // IsBigInt is always imported, from local/shared package
-        break;
-      case "bool":
-        decorators.push(decoratorDecl("IsBoolean"));
-        imports.add("IsBoolean");
-        break;
-      case "text":
-        decorators.push(decoratorDecl("IsString"));
-        imports.add("IsString");
-        break;
-      case "float4":
-      case "float8":
-        decorators.push(decoratorDecl("IsNumber"));
-        imports.add("IsNumber");
-        break;
-      case "int2":
-      case "int4":
-        decorators.push(decoratorDecl("IsInt"));
-        imports.add("IsInt");
-        break;
-      case "timestamptz":
-      case "timestamp":
-        decorators.push(decoratorDecl("IsISO8601"));
-        imports.add("IsISO8601");
-        break;
+    const decoratorName = decoratorForTypeName(typeName, imports);
+    if (decoratorName != null) {
+      decorators.push(decoratorDecl(decoratorName));
     }
   }
+
   return decorators;
 }
 
-function decoratorDecl(name: string) {
+function decoratorDecl(name: string, args?: Expression[]) {
   return factory.createDecorator(
     factory.createCallExpression(
       factory.createIdentifier(name),
       undefined,
-      undefined
+      args
     )
   );
 }
@@ -1279,5 +1289,60 @@ function getTryCatch(statements: ts.Statement[]) {
     ),
     // finally block (none)
     undefined
+  );
+}
+
+function filterDecl(
+  name: string,
+  driver: Driver,
+  columns: Column[]
+): ts.Statement {
+  return factory.createClassDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    factory.createIdentifier(`${snakeToPascal(name)}Filter`),
+    undefined,
+    undefined,
+    columns.filter(excludedFilter).map((column, i) => {
+      const decorators = [decoratorDecl("IsOptional")];
+
+      const typeDecoratorName = decoratorForTypeName(
+        column.type!.name,
+        new Set()
+      );
+
+      if (typeDecoratorName != null) {
+        if (["IsISO8601", "IsNumber", "IsUuid"].includes(typeDecoratorName)) {
+          // Options is the second argument
+          decorators.push(
+            decoratorDecl(typeDecoratorName, [
+              factory.createIdentifier("undefined"),
+              factory.createObjectLiteralExpression([
+                factory.createPropertyAssignment("each", factory.createTrue()),
+              ]),
+            ])
+          );
+        } else {
+          // By default, options is the first argument
+          decorators.push(
+            decoratorDecl(typeDecoratorName, [
+              factory.createObjectLiteralExpression([
+                factory.createPropertyAssignment("each", factory.createTrue()),
+              ]),
+            ])
+          );
+        }
+      }
+
+      return factory.createPropertyDeclaration(
+        decorators,
+        factory.createIdentifier(colName(i, column)),
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createUnionTypeNode([
+          driver.columnType(column),
+          factory.createArrayTypeNode(driver.columnType(column)),
+        ]),
+        undefined
+      );
+    })
   );
 }
