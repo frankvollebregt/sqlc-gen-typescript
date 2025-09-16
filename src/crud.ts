@@ -1064,6 +1064,85 @@ function getSelectMethod(table: Table) {
             )
           ),
 
+          // The pagination clause
+          // const paginationClause = `${pagination?.limit != null ? `LIMIT ${pagination.limit}` : ''} ${pagination?.offset != null ? `OFFSET ${pagination.offset}` : ''}`;
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                factory.createVariableDeclaration(
+                  "paginationClause",
+                  undefined,
+                  undefined,
+                  factory.createTemplateExpression(
+                    factory.createTemplateHead(""),
+                    [
+                      factory.createTemplateSpan(
+                        factory.createConditionalExpression(
+                          factory.createBinaryExpression(
+                            factory.createPropertyAccessChain(
+                              factory.createIdentifier("pagination"),
+                              factory.createToken(SyntaxKind.QuestionDotToken),
+                              factory.createIdentifier("limit")
+                            ),
+                            ts.SyntaxKind.ExclamationEqualsToken,
+                            factory.createNull()
+                          ),
+                          factory.createToken(ts.SyntaxKind.QuestionToken),
+                          factory.createTemplateExpression(
+                            factory.createTemplateHead("LIMIT "),
+                            [
+                              factory.createTemplateSpan(
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("pagination"),
+                                  factory.createIdentifier("limit")
+                                ),
+                                factory.createTemplateTail("", undefined)
+                              ),
+                            ]
+                          ),
+                          factory.createToken(ts.SyntaxKind.ColonToken),
+                          factory.createStringLiteral("")
+                        ),
+                        factory.createTemplateMiddle(" ", undefined)
+                      ),
+                      factory.createTemplateSpan(
+                        factory.createConditionalExpression(
+                          factory.createBinaryExpression(
+                            factory.createPropertyAccessChain(
+                              factory.createIdentifier("pagination"),
+                              factory.createToken(SyntaxKind.QuestionDotToken),
+                              factory.createIdentifier("offset")
+                            ),
+                            ts.SyntaxKind.ExclamationEqualsToken,
+                            factory.createNull()
+                          ),
+                          factory.createToken(ts.SyntaxKind.QuestionToken),
+                          factory.createTemplateExpression(
+                            factory.createTemplateHead("OFFSET "),
+                            [
+                              factory.createTemplateSpan(
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("pagination"),
+                                  factory.createIdentifier("offset")
+                                ),
+                                factory.createTemplateTail("", undefined)
+                              ),
+                            ]
+                          ),
+                          factory.createToken(ts.SyntaxKind.ColonToken),
+                          factory.createStringLiteral("")
+                        ),
+                        factory.createTemplateTail("", undefined)
+                      ),
+                    ]
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
           // The query
           ts.factory.createVariableStatement(
             undefined,
@@ -1085,7 +1164,11 @@ function getSelectMethod(table: Table) {
                       ),
                       factory.createTemplateSpan(
                         factory.createIdentifier("sortClause"),
-                        factory.createTemplateTail(" ", undefined)
+                        factory.createTemplateMiddle(" ", undefined)
+                      ),
+                      factory.createTemplateSpan(
+                        factory.createIdentifier("paginationClause"),
+                        factory.createTemplateTail("", undefined)
                       ),
                     ]
                   )
