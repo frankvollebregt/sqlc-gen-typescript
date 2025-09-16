@@ -32,12 +32,7 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
     createNamedImportDeclaration(["PartialType", "OmitType"], "@nestjs/swagger")
   );
 
-  const imports = new Set<string>([
-    "ValidationOptions",
-    "IsDefined",
-    "IsOptional",
-    "IsArray",
-  ]);
+  const imports = new Set<string>(["IsDefined", "IsOptional", "IsIn", "Min"]);
 
   const tableNodes = [];
   for (const table of tables) {
@@ -45,6 +40,7 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
     tableNodes.push(insertableDecl(table.rel!.name, table.columns));
     tableNodes.push(updateableDecl(table.rel!.name, driver, table.columns));
     tableNodes.push(filterDecl(table.rel!.name, driver, table.columns));
+    tableNodes.push(sortDecl(table.rel!.name, table.columns));
   }
 
   nodes.push(createNamedImportDeclaration(["ClsService"], "nestjs-cls"));
@@ -98,6 +94,40 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
               ]
             )
           )
+        ),
+      ]
+    )
+  );
+
+  // Class for LIMIT and OFFSET
+  nodes.push(
+    factory.createClassDeclaration(
+      [factory.createToken(SyntaxKind.ExportKeyword)],
+      factory.createIdentifier("Pagination"),
+      undefined,
+      undefined,
+      [
+        factory.createPropertyDeclaration(
+          [
+            decoratorDecl("IsOptional"),
+            decoratorDecl("IsInt"),
+            decoratorDecl("Min", [factory.createNumericLiteral("1")]),
+          ],
+          factory.createIdentifier("limit"),
+          factory.createToken(SyntaxKind.QuestionToken),
+          factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
+          undefined
+        ),
+        factory.createPropertyDeclaration(
+          [
+            decoratorDecl("IsOptional"),
+            decoratorDecl("IsInt"),
+            decoratorDecl("Min", [factory.createNumericLiteral("0")]),
+          ],
+          factory.createIdentifier("offset"),
+          factory.createToken(SyntaxKind.QuestionToken),
+          factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
+          undefined
         ),
       ]
     )
@@ -600,6 +630,25 @@ function getSelectMethod(table: Table) {
           undefined,
           factory.createTypeReferenceNode(snakeToPascal(tableName) + "Filter")
         ),
+        factory.createParameterDeclaration(
+          undefined,
+          undefined,
+          "sort",
+          factory.createToken(ts.SyntaxKind.QuestionToken),
+          factory.createUnionTypeNode([
+            factory.createTypeReferenceNode(snakeToPascal(tableName) + "Sort"),
+            factory.createArrayTypeNode(
+              factory.createTypeReferenceNode(snakeToPascal(tableName) + "Sort")
+            ),
+          ])
+        ),
+        factory.createParameterDeclaration(
+          undefined,
+          undefined,
+          "pagination",
+          factory.createToken(ts.SyntaxKind.QuestionToken),
+          factory.createTypeReferenceNode("Pagination")
+        ),
       ],
       factory.createTypeReferenceNode("Promise", [
         factory.createArrayTypeNode(
@@ -659,7 +708,7 @@ function getSelectMethod(table: Table) {
                   )
                 ),
                 factory.createVariableDeclaration(
-                  "whereConditions",
+                  "filterConditions",
                   undefined,
                   factory.createArrayTypeNode(
                     factory.createKeywordTypeNode(SyntaxKind.StringKeyword)
@@ -743,7 +792,7 @@ function getSelectMethod(table: Table) {
                   factory.createExpressionStatement(
                     factory.createCallExpression(
                       factory.createPropertyAccessExpression(
-                        factory.createIdentifier("whereConditions"),
+                        factory.createIdentifier("filterConditions"),
                         "push"
                       ),
                       undefined,
@@ -774,7 +823,7 @@ function getSelectMethod(table: Table) {
                   factory.createExpressionStatement(
                     factory.createCallExpression(
                       factory.createPropertyAccessExpression(
-                        factory.createIdentifier("whereConditions"),
+                        factory.createIdentifier("filterConditions"),
                         "push"
                       ),
                       undefined,
@@ -822,13 +871,13 @@ function getSelectMethod(table: Table) {
             factory.createVariableDeclarationList(
               [
                 factory.createVariableDeclaration(
-                  "whereClause",
+                  "filterClause",
                   undefined,
                   undefined,
                   factory.createConditionalExpression(
                     factory.createBinaryExpression(
                       factory.createPropertyAccessExpression(
-                        factory.createIdentifier("whereConditions"),
+                        factory.createIdentifier("filterConditions"),
                         "length"
                       ),
                       ts.SyntaxKind.GreaterThanToken,
@@ -841,7 +890,7 @@ function getSelectMethod(table: Table) {
                         factory.createTemplateSpan(
                           factory.createCallExpression(
                             factory.createPropertyAccessExpression(
-                              factory.createIdentifier("whereConditions"),
+                              factory.createIdentifier("filterConditions"),
                               "join"
                             ),
                             undefined,
@@ -860,6 +909,161 @@ function getSelectMethod(table: Table) {
               ts.NodeFlags.Const
             )
           ),
+
+          // The sort clause
+          // const sortArr = Array.isArray(sort) ? sort : [sort];
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                factory.createVariableDeclaration(
+                  "sortArr",
+                  undefined,
+                  undefined,
+                  factory.createConditionalExpression(
+                    // sort == null ? [] : (Array.isArray(sort) ? sort : [sort]
+                    factory.createBinaryExpression(
+                      factory.createIdentifier("sort"),
+                      ts.SyntaxKind.EqualsEqualsToken,
+                      factory.createNull()
+                    ),
+                    factory.createToken(ts.SyntaxKind.QuestionToken),
+                    factory.createArrayLiteralExpression([], false),
+                    factory.createToken(ts.SyntaxKind.ColonToken),
+                    factory.createConditionalExpression(
+                      factory.createCallExpression(
+                        factory.createPropertyAccessExpression(
+                          factory.createIdentifier("Array"),
+                          "isArray"
+                        ),
+                        undefined,
+                        [factory.createIdentifier("sort")]
+                      ),
+                      factory.createToken(ts.SyntaxKind.QuestionToken),
+                      factory.createIdentifier("sort"),
+                      factory.createToken(ts.SyntaxKind.ColonToken),
+                      factory.createArrayLiteralExpression(
+                        [factory.createIdentifier("sort")],
+                        false
+                      )
+                    )
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+          // const sortExpressions = sortArr.map((sort) => `${sort.column} ${sort.direction ?? ''}`);
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                factory.createVariableDeclaration(
+                  "sortExpressions",
+                  undefined,
+                  undefined,
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createIdentifier("sortArr"),
+                      "map"
+                    ),
+                    undefined,
+
+                    [
+                      factory.createArrowFunction(
+                        undefined,
+                        undefined,
+                        [
+                          factory.createParameterDeclaration(
+                            undefined,
+                            undefined,
+                            "sort",
+                            undefined,
+                            undefined,
+                            undefined
+                          ),
+                        ],
+
+                        undefined,
+                        factory.createToken(
+                          ts.SyntaxKind.EqualsGreaterThanToken
+                        ),
+                        factory.createTemplateExpression(
+                          factory.createTemplateHead("", undefined),
+                          [
+                            factory.createTemplateSpan(
+                              factory.createPropertyAccessExpression(
+                                factory.createIdentifier("sort"),
+                                "column"
+                              ),
+                              factory.createTemplateMiddle(" ", undefined)
+                            ),
+                            factory.createTemplateSpan(
+                              factory.createBinaryExpression(
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("sort"),
+                                  "direction"
+                                ),
+                                ts.SyntaxKind.QuestionQuestionToken,
+                                factory.createStringLiteral("")
+                              ),
+                              factory.createTemplateTail("", undefined)
+                            ),
+                          ]
+                        )
+                      ),
+                    ]
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
+          // const sortClause = sortArr.length === 0 ? '' : `ORDER BY ${sortExpressions.join(', ')}`;
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                factory.createVariableDeclaration(
+                  "sortClause",
+                  undefined,
+                  undefined,
+                  factory.createConditionalExpression(
+                    factory.createBinaryExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("sortArr"),
+                        "length"
+                      ),
+                      ts.SyntaxKind.EqualsEqualsEqualsToken,
+                      factory.createNumericLiteral("0")
+                    ),
+                    factory.createToken(ts.SyntaxKind.QuestionToken),
+                    factory.createStringLiteral(""),
+                    factory.createToken(ts.SyntaxKind.ColonToken),
+                    factory.createTemplateExpression(
+                      factory.createTemplateHead("ORDER BY "),
+                      [
+                        factory.createTemplateSpan(
+                          factory.createCallExpression(
+                            factory.createPropertyAccessExpression(
+                              factory.createIdentifier("sortExpressions"),
+                              "join"
+                            ),
+                            undefined,
+                            [factory.createStringLiteral(", ")]
+                          ),
+                          factory.createTemplateTail("", undefined)
+                        ),
+                      ]
+                    )
+                  )
+                ),
+              ],
+              ts.NodeFlags.Const
+            )
+          ),
+
           // The query
           ts.factory.createVariableStatement(
             undefined,
@@ -870,13 +1074,18 @@ function getSelectMethod(table: Table) {
                   undefined,
                   undefined,
                   factory.createTemplateExpression(
+                    // i.e. `select * from table ${whereClause} ${sortClause}`
                     factory.createTemplateHead(
                       getSelectQueryString(table, columns)
                     ),
                     [
                       factory.createTemplateSpan(
-                        factory.createIdentifier("whereClause"),
-                        factory.createTemplateTail("", undefined)
+                        factory.createIdentifier("filterClause"),
+                        factory.createTemplateMiddle(" ", undefined)
+                      ),
+                      factory.createTemplateSpan(
+                        factory.createIdentifier("sortClause"),
+                        factory.createTemplateTail(" ", undefined)
                       ),
                     ]
                   )
@@ -1518,7 +1727,7 @@ function filterDecl(
   name: string,
   driver: Driver,
   columns: Column[]
-): ts.Statement {
+): ts.ClassDeclaration {
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
     factory.createIdentifier(`${snakeToPascal(name)}Filter`),
@@ -1566,5 +1775,59 @@ function filterDecl(
         undefined
       );
     })
+  );
+}
+
+function sortDecl(tableName: string, columns: Column[]) {
+  const columnNames = columns.filter(excludedFilter).map((col) => col.name);
+
+  return factory.createClassDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    factory.createIdentifier(snakeToPascal(tableName) + "Sort"),
+    undefined,
+    undefined,
+    [
+      factory.createPropertyDeclaration(
+        [
+          decoratorDecl("IsDefined"),
+          decoratorDecl("IsIn", [
+            factory.createArrayLiteralExpression(
+              columnNames.flatMap((name) => [
+                factory.createStringLiteral(name),
+              ]),
+              true
+            ),
+          ]),
+        ],
+        factory.createIdentifier("column"),
+        undefined,
+        factory.createTypeOperatorNode(
+          SyntaxKind.KeyOfKeyword,
+          factory.createTypeReferenceNode(snakeToPascal(tableName))
+        ),
+        undefined
+      ),
+      factory.createPropertyDeclaration(
+        [
+          decoratorDecl("IsOptional"),
+          decoratorDecl("IsIn", [
+            factory.createArrayLiteralExpression(
+              [
+                factory.createStringLiteral("ASC"),
+                factory.createStringLiteral("DESC"),
+              ],
+              false
+            ),
+          ]),
+        ],
+        factory.createIdentifier("direction"),
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createUnionTypeNode([
+          factory.createLiteralTypeNode(factory.createStringLiteral("ASC")),
+          factory.createLiteralTypeNode(factory.createStringLiteral("DESC")),
+        ]),
+        undefined
+      ),
+    ]
   );
 }
