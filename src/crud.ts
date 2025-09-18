@@ -627,7 +627,7 @@ function getSelectMethod(table: Table) {
           undefined,
           undefined,
           "filter",
-          undefined,
+          factory.createToken(ts.SyntaxKind.QuestionToken),
           factory.createTypeReferenceNode(snakeToPascal(tableName) + "Filter")
         ),
         factory.createParameterDeclaration(
@@ -675,7 +675,14 @@ function getSelectMethod(table: Table) {
                           "getOwnPropertyNames"
                         ),
                         undefined,
-                        [factory.createIdentifier("filter")]
+
+                        [
+                          factory.createBinaryExpression(
+                            factory.createIdentifier("filter"),
+                            SyntaxKind.QuestionQuestionToken,
+                            factory.createObjectLiteralExpression()
+                          ),
+                        ]
                       ),
                       "filter"
                     ),
@@ -696,8 +703,9 @@ function getSelectMethod(table: Table) {
                           ts.SyntaxKind.EqualsGreaterThanToken
                         ),
                         factory.createBinaryExpression(
-                          factory.createElementAccessExpression(
+                          factory.createElementAccessChain(
                             factory.createIdentifier("filter"),
+                            factory.createToken(SyntaxKind.QuestionDotToken),
                             factory.createIdentifier("prop")
                           ),
                           ts.SyntaxKind.ExclamationEqualsToken,
@@ -767,8 +775,9 @@ function getSelectMethod(table: Table) {
                       ts.factory.createIdentifier("value"),
                       undefined,
                       undefined,
-                      factory.createElementAccessExpression(
+                      factory.createElementAccessChain(
                         factory.createIdentifier("filter"),
+                        factory.createToken(SyntaxKind.QuestionDotToken),
                         factory.createIdentifier("prop")
                       )
                     ),
