@@ -133,6 +133,68 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
     )
   );
 
+  // General class for sorting
+  // type Direction = 'ASC' | 'DESC';
+  nodes.push(
+    factory.createTypeAliasDeclaration(
+      undefined,
+      factory.createIdentifier("Direction"),
+      undefined,
+      factory.createUnionTypeNode([
+        factory.createLiteralTypeNode(factory.createStringLiteral("ASC")),
+        factory.createLiteralTypeNode(factory.createStringLiteral("DESC")),
+      ])
+    )
+  );
+
+  nodes.push(
+    factory.createClassDeclaration(
+      [factory.createToken(SyntaxKind.AbstractKeyword)],
+      factory.createIdentifier("Sort"),
+      undefined,
+      undefined,
+      [
+        factory.createPropertyDeclaration(
+          [
+            decoratorDecl("IsDefined"),
+            decoratorDecl("IsString"),
+            factory.createToken(SyntaxKind.AbstractKeyword),
+          ],
+          factory.createIdentifier("column"),
+          undefined,
+          factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
+          undefined
+        ),
+        factory.createPropertyDeclaration(
+          [
+            decoratorDecl("IsOptional"),
+            decoratorDecl("IsIn", [
+              factory.createArrayLiteralExpression(
+                [
+                  factory.createStringLiteral("ASC"),
+                  factory.createStringLiteral("DESC"),
+                ],
+                false
+              ),
+            ]),
+          ],
+          factory.createIdentifier("direction"),
+          factory.createToken(SyntaxKind.QuestionToken),
+          factory.createTypeReferenceNode(
+            factory.createIdentifier("Direction"),
+            undefined
+          ),
+          undefined
+        ),
+      ]
+    )
+  );
+
+  // Helpers for select query building
+  nodes.push(getFilterClauseDecl());
+  nodes.push(getSortClauseDecl());
+  nodes.push(getPaginationClauseDecl());
+
   nodes.push(...tableNodes);
 
   const crudNodes: Node[] = [replacerMethodDecl()];
@@ -612,7 +674,6 @@ function getUpdateQueryString(table: Table): string {
 
 function getSelectMethod(table: Table) {
   const tableName = table.rel!.name;
-  const idName = snakeToCamel(tableName + "id");
 
   // Only accept included columns
   const columns = table.columns.filter(excludedFilter);
@@ -658,260 +719,32 @@ function getSelectMethod(table: Table) {
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
-          // const definedProperties = Object.getOwnPropertyNames(filter).filter((prop) => filter[prop] != null);
+          // Get the filter clause
           factory.createVariableStatement(
             undefined,
             factory.createVariableDeclarationList(
               [
                 factory.createVariableDeclaration(
-                  "definedProperties",
+                  factory.createObjectBindingPattern([
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "filterClause",
+                      undefined
+                    ),
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "values",
+                      undefined
+                    ),
+                  ]),
                   undefined,
                   undefined,
                   factory.createCallExpression(
-                    factory.createPropertyAccessExpression(
-                      factory.createCallExpression(
-                        factory.createPropertyAccessExpression(
-                          factory.createIdentifier("Object"),
-                          "getOwnPropertyNames"
-                        ),
-                        undefined,
-
-                        [
-                          factory.createBinaryExpression(
-                            factory.createIdentifier("filter"),
-                            SyntaxKind.QuestionQuestionToken,
-                            factory.createObjectLiteralExpression()
-                          ),
-                        ]
-                      ),
-                      "filter"
-                    ),
+                    factory.createIdentifier("getFilterClause"),
                     undefined,
-                    [
-                      factory.createArrowFunction(
-                        undefined,
-                        undefined,
-                        [
-                          factory.createParameterDeclaration(
-                            undefined,
-                            undefined,
-                            "prop"
-                          ),
-                        ],
-                        undefined,
-                        factory.createToken(
-                          ts.SyntaxKind.EqualsGreaterThanToken
-                        ),
-                        factory.createBinaryExpression(
-                          factory.createElementAccessChain(
-                            factory.createIdentifier("filter"),
-                            factory.createToken(SyntaxKind.QuestionDotToken),
-                            factory.createIdentifier("prop")
-                          ),
-                          ts.SyntaxKind.ExclamationEqualsToken,
-                          factory.createNull()
-                        )
-                      ),
-                    ]
-                  )
-                ),
-                factory.createVariableDeclaration(
-                  "filterConditions",
-                  undefined,
-                  factory.createArrayTypeNode(
-                    factory.createKeywordTypeNode(SyntaxKind.StringKeyword)
-                  ),
-                  factory.createArrayLiteralExpression([], false)
-                ),
-                factory.createVariableDeclaration(
-                  "values",
-                  undefined,
-                  factory.createArrayTypeNode(
-                    factory.createKeywordTypeNode(SyntaxKind.AnyKeyword)
-                  ),
-                  factory.createArrayLiteralExpression([], false)
-                ),
-              ],
-              ts.NodeFlags.Const
-            )
-          ),
-
-          factory.createVariableStatement(
-            undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  "counter",
-                  undefined,
-                  undefined,
-                  factory.createNumericLiteral("1")
-                ),
-              ],
-              ts.NodeFlags.Let
-            )
-          ),
-          // for (const prop of definedProperties) {
-          factory.createForOfStatement(
-            undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  ts.factory.createIdentifier("prop"),
-                  undefined,
-                  undefined,
-                  undefined
-                ),
-              ],
-              ts.NodeFlags.Const
-            ),
-            factory.createIdentifier("definedProperties"),
-            factory.createBlock([
-              // const value = filter[prop];
-              factory.createVariableStatement(
-                undefined,
-                factory.createVariableDeclarationList(
-                  [
-                    factory.createVariableDeclaration(
-                      ts.factory.createIdentifier("value"),
-                      undefined,
-                      undefined,
-                      factory.createElementAccessChain(
-                        factory.createIdentifier("filter"),
-                        factory.createToken(SyntaxKind.QuestionDotToken),
-                        factory.createIdentifier("prop")
-                      )
-                    ),
-                  ],
-                  ts.NodeFlags.Const
-                )
-              ),
-              // if (Array.isArray(value)) {
-              factory.createIfStatement(
-                factory.createCallExpression(
-                  factory.createPropertyAccessExpression(
-                    factory.createIdentifier("Array"),
-                    "isArray"
-                  ),
-                  undefined,
-                  [factory.createIdentifier("value")]
-                ),
-                // then
-                factory.createBlock([
-                  // whereConditions.push(`${prop} = ANY($${counter})`);
-                  factory.createExpressionStatement(
-                    factory.createCallExpression(
-                      factory.createPropertyAccessExpression(
-                        factory.createIdentifier("filterConditions"),
-                        "push"
-                      ),
-                      undefined,
-                      [
-                        factory.createTemplateExpression(
-                          factory.createTemplateHead("", undefined),
-                          [
-                            factory.createTemplateSpan(
-                              factory.createIdentifier("prop"),
-                              factory.createTemplateMiddle(
-                                " = ANY($",
-                                undefined
-                              )
-                            ),
-                            factory.createTemplateSpan(
-                              factory.createIdentifier("counter"),
-                              factory.createTemplateTail(")", ")")
-                            ),
-                          ]
-                        ),
-                      ]
-                    )
-                  ),
-                ]),
-                factory.createBlock([
-                  // else
-                  // whereConditions.push(`${prop} = $${counter}`);
-                  factory.createExpressionStatement(
-                    factory.createCallExpression(
-                      factory.createPropertyAccessExpression(
-                        factory.createIdentifier("filterConditions"),
-                        "push"
-                      ),
-                      undefined,
-                      [
-                        factory.createTemplateExpression(
-                          factory.createTemplateHead("", undefined),
-                          [
-                            factory.createTemplateSpan(
-                              factory.createIdentifier("prop"),
-                              factory.createTemplateMiddle(" = $", undefined)
-                            ),
-                            factory.createTemplateSpan(
-                              factory.createIdentifier("counter"),
-                              factory.createTemplateTail("", undefined)
-                            ),
-                          ]
-                        ),
-                      ]
-                    )
-                  ),
-                ])
-              ),
-              // values.push(value);
-              factory.createExpressionStatement(
-                factory.createCallExpression(
-                  factory.createPropertyAccessExpression(
-                    factory.createIdentifier("values"),
-                    "push"
-                  ),
-                  undefined,
-                  [factory.createIdentifier("value")]
-                )
-              ),
-              // counter++;
-              factory.createExpressionStatement(
-                factory.createPostfixIncrement(
-                  factory.createIdentifier("counter")
-                )
-              ),
-            ])
-          ),
-          // const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-          factory.createVariableStatement(
-            undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  "filterClause",
-                  undefined,
-                  undefined,
-                  factory.createConditionalExpression(
-                    factory.createBinaryExpression(
-                      factory.createPropertyAccessExpression(
-                        factory.createIdentifier("filterConditions"),
-                        "length"
-                      ),
-                      ts.SyntaxKind.GreaterThanToken,
-                      factory.createNumericLiteral("0")
-                    ),
-                    factory.createToken(ts.SyntaxKind.QuestionToken),
-                    factory.createTemplateExpression(
-                      factory.createTemplateHead("WHERE "),
-                      [
-                        factory.createTemplateSpan(
-                          factory.createCallExpression(
-                            factory.createPropertyAccessExpression(
-                              factory.createIdentifier("filterConditions"),
-                              "join"
-                            ),
-                            undefined,
-
-                            [factory.createStringLiteral(" AND ")]
-                          ),
-                          factory.createTemplateTail("", undefined)
-                        ),
-                      ]
-                    ),
-                    factory.createToken(ts.SyntaxKind.ColonToken),
-                    factory.createStringLiteral("")
+                    [factory.createIdentifier("filter")]
                   )
                 ),
               ],
@@ -919,117 +752,7 @@ function getSelectMethod(table: Table) {
             )
           ),
 
-          // The sort clause
-          // const sortArr = Array.isArray(sort) ? sort : [sort];
-          factory.createVariableStatement(
-            undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  "sortArr",
-                  undefined,
-                  undefined,
-                  factory.createConditionalExpression(
-                    // sort == null ? [] : (Array.isArray(sort) ? sort : [sort]
-                    factory.createBinaryExpression(
-                      factory.createIdentifier("sort"),
-                      ts.SyntaxKind.EqualsEqualsToken,
-                      factory.createNull()
-                    ),
-                    factory.createToken(ts.SyntaxKind.QuestionToken),
-                    factory.createArrayLiteralExpression([], false),
-                    factory.createToken(ts.SyntaxKind.ColonToken),
-                    factory.createConditionalExpression(
-                      factory.createCallExpression(
-                        factory.createPropertyAccessExpression(
-                          factory.createIdentifier("Array"),
-                          "isArray"
-                        ),
-                        undefined,
-                        [factory.createIdentifier("sort")]
-                      ),
-                      factory.createToken(ts.SyntaxKind.QuestionToken),
-                      factory.createIdentifier("sort"),
-                      factory.createToken(ts.SyntaxKind.ColonToken),
-                      factory.createArrayLiteralExpression(
-                        [factory.createIdentifier("sort")],
-                        false
-                      )
-                    )
-                  )
-                ),
-              ],
-              ts.NodeFlags.Const
-            )
-          ),
-          // const sortExpressions = sortArr.map((sort) => `${sort.column} ${sort.direction ?? ''}`);
-          factory.createVariableStatement(
-            undefined,
-            factory.createVariableDeclarationList(
-              [
-                factory.createVariableDeclaration(
-                  "sortExpressions",
-                  undefined,
-                  undefined,
-                  factory.createCallExpression(
-                    factory.createPropertyAccessExpression(
-                      factory.createIdentifier("sortArr"),
-                      "map"
-                    ),
-                    undefined,
-
-                    [
-                      factory.createArrowFunction(
-                        undefined,
-                        undefined,
-                        [
-                          factory.createParameterDeclaration(
-                            undefined,
-                            undefined,
-                            "sort",
-                            undefined,
-                            undefined,
-                            undefined
-                          ),
-                        ],
-
-                        undefined,
-                        factory.createToken(
-                          ts.SyntaxKind.EqualsGreaterThanToken
-                        ),
-                        factory.createTemplateExpression(
-                          factory.createTemplateHead("", undefined),
-                          [
-                            factory.createTemplateSpan(
-                              factory.createPropertyAccessExpression(
-                                factory.createIdentifier("sort"),
-                                "column"
-                              ),
-                              factory.createTemplateMiddle(" ", undefined)
-                            ),
-                            factory.createTemplateSpan(
-                              factory.createBinaryExpression(
-                                factory.createPropertyAccessExpression(
-                                  factory.createIdentifier("sort"),
-                                  "direction"
-                                ),
-                                ts.SyntaxKind.QuestionQuestionToken,
-                                factory.createStringLiteral("")
-                              ),
-                              factory.createTemplateTail("", undefined)
-                            ),
-                          ]
-                        )
-                      ),
-                    ]
-                  )
-                ),
-              ],
-              ts.NodeFlags.Const
-            )
-          ),
-
-          // const sortClause = sortArr.length === 0 ? '' : `ORDER BY ${sortExpressions.join(', ')}`;
+          // Get the sort clause
           factory.createVariableStatement(
             undefined,
             factory.createVariableDeclarationList(
@@ -1038,34 +761,10 @@ function getSelectMethod(table: Table) {
                   "sortClause",
                   undefined,
                   undefined,
-                  factory.createConditionalExpression(
-                    factory.createBinaryExpression(
-                      factory.createPropertyAccessExpression(
-                        factory.createIdentifier("sortArr"),
-                        "length"
-                      ),
-                      ts.SyntaxKind.EqualsEqualsEqualsToken,
-                      factory.createNumericLiteral("0")
-                    ),
-                    factory.createToken(ts.SyntaxKind.QuestionToken),
-                    factory.createStringLiteral(""),
-                    factory.createToken(ts.SyntaxKind.ColonToken),
-                    factory.createTemplateExpression(
-                      factory.createTemplateHead("ORDER BY "),
-                      [
-                        factory.createTemplateSpan(
-                          factory.createCallExpression(
-                            factory.createPropertyAccessExpression(
-                              factory.createIdentifier("sortExpressions"),
-                              "join"
-                            ),
-                            undefined,
-                            [factory.createStringLiteral(", ")]
-                          ),
-                          factory.createTemplateTail("", undefined)
-                        ),
-                      ]
-                    )
+                  factory.createCallExpression(
+                    factory.createIdentifier("getSortClause"),
+                    undefined,
+                    [factory.createIdentifier("sort")]
                   )
                 ),
               ],
@@ -1073,8 +772,7 @@ function getSelectMethod(table: Table) {
             )
           ),
 
-          // The pagination clause
-          // const paginationClause = `${pagination?.limit != null ? `LIMIT ${pagination.limit}` : ''} ${pagination?.offset != null ? `OFFSET ${pagination.offset}` : ''}`;
+          // Get the pagination clause
           factory.createVariableStatement(
             undefined,
             factory.createVariableDeclarationList(
@@ -1083,68 +781,10 @@ function getSelectMethod(table: Table) {
                   "paginationClause",
                   undefined,
                   undefined,
-                  factory.createTemplateExpression(
-                    factory.createTemplateHead(""),
-                    [
-                      factory.createTemplateSpan(
-                        factory.createConditionalExpression(
-                          factory.createBinaryExpression(
-                            factory.createPropertyAccessChain(
-                              factory.createIdentifier("pagination"),
-                              factory.createToken(SyntaxKind.QuestionDotToken),
-                              factory.createIdentifier("limit")
-                            ),
-                            ts.SyntaxKind.ExclamationEqualsToken,
-                            factory.createNull()
-                          ),
-                          factory.createToken(ts.SyntaxKind.QuestionToken),
-                          factory.createTemplateExpression(
-                            factory.createTemplateHead("LIMIT "),
-                            [
-                              factory.createTemplateSpan(
-                                factory.createPropertyAccessExpression(
-                                  factory.createIdentifier("pagination"),
-                                  factory.createIdentifier("limit")
-                                ),
-                                factory.createTemplateTail("", undefined)
-                              ),
-                            ]
-                          ),
-                          factory.createToken(ts.SyntaxKind.ColonToken),
-                          factory.createStringLiteral("")
-                        ),
-                        factory.createTemplateMiddle(" ", undefined)
-                      ),
-                      factory.createTemplateSpan(
-                        factory.createConditionalExpression(
-                          factory.createBinaryExpression(
-                            factory.createPropertyAccessChain(
-                              factory.createIdentifier("pagination"),
-                              factory.createToken(SyntaxKind.QuestionDotToken),
-                              factory.createIdentifier("offset")
-                            ),
-                            ts.SyntaxKind.ExclamationEqualsToken,
-                            factory.createNull()
-                          ),
-                          factory.createToken(ts.SyntaxKind.QuestionToken),
-                          factory.createTemplateExpression(
-                            factory.createTemplateHead("OFFSET "),
-                            [
-                              factory.createTemplateSpan(
-                                factory.createPropertyAccessExpression(
-                                  factory.createIdentifier("pagination"),
-                                  factory.createIdentifier("offset")
-                                ),
-                                factory.createTemplateTail("", undefined)
-                              ),
-                            ]
-                          ),
-                          factory.createToken(ts.SyntaxKind.ColonToken),
-                          factory.createStringLiteral("")
-                        ),
-                        factory.createTemplateTail("", undefined)
-                      ),
-                    ]
+                  factory.createCallExpression(
+                    factory.createIdentifier("getPaginationClause"),
+                    undefined,
+                    [factory.createIdentifier("pagination")]
                   )
                 ),
               ],
@@ -1293,14 +933,9 @@ function getDeleteMethod(table: Table) {
         factory.createParameterDeclaration(
           undefined,
           undefined,
-          idName,
-          undefined,
-          factory.createUnionTypeNode([
-            factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
-            factory.createArrayTypeNode(
-              factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
-            ),
-          ])
+          "filter",
+          factory.createToken(ts.SyntaxKind.QuestionToken),
+          factory.createTypeReferenceNode(snakeToPascal(tableName) + "Filter")
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
@@ -1309,36 +944,39 @@ function getDeleteMethod(table: Table) {
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
-          ts.factory.createVariableStatement(
+          // Get the filter clause
+          factory.createVariableStatement(
             undefined,
-            ts.factory.createVariableDeclarationList(
+            factory.createVariableDeclarationList(
               [
-                ts.factory.createVariableDeclaration(
-                  ts.factory.createIdentifier("arr"),
-                  undefined,
-                  undefined,
-                  ts.factory.createConditionalExpression(
-                    ts.factory.createCallExpression(
-                      ts.factory.createPropertyAccessExpression(
-                        ts.factory.createIdentifier("Array"),
-                        ts.factory.createIdentifier("isArray")
-                      ),
+                factory.createVariableDeclaration(
+                  factory.createObjectBindingPattern([
+                    factory.createBindingElement(
                       undefined,
-                      [ts.factory.createIdentifier(idName)]
+                      undefined,
+                      "filterClause",
+                      undefined
                     ),
-                    ts.factory.createToken(ts.SyntaxKind.QuestionToken),
-                    ts.factory.createIdentifier(idName),
-                    ts.factory.createToken(ts.SyntaxKind.ColonToken),
-                    ts.factory.createArrayLiteralExpression(
-                      [ts.factory.createIdentifier(idName)],
-                      false
-                    )
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "values",
+                      undefined
+                    ),
+                  ]),
+                  undefined,
+                  undefined,
+                  factory.createCallExpression(
+                    factory.createIdentifier("getFilterClause"),
+                    undefined,
+                    [factory.createIdentifier("filter")]
                   )
                 ),
               ],
               ts.NodeFlags.Const
             )
           ),
+
           // The query
           ts.factory.createVariableStatement(
             undefined,
@@ -1348,8 +986,15 @@ function getDeleteMethod(table: Table) {
                   "query",
                   undefined,
                   undefined,
-                  ts.factory.createStringLiteral(
-                    `DELETE FROM ${tableName} WHERE ${tableName}id = ANY($1);`
+                  factory.createTemplateExpression(
+                    // i.e. `DELETE FROM table ${filterClause}`
+                    factory.createTemplateHead(`DELETE FROM ${tableName} `),
+                    [
+                      factory.createTemplateSpan(
+                        factory.createIdentifier("filterClause"),
+                        factory.createTemplateTail("", undefined)
+                      ),
+                    ]
                   )
                 ),
               ],
@@ -1382,9 +1027,7 @@ function getDeleteMethod(table: Table) {
                         ),
                         factory.createPropertyAssignment(
                           "values",
-                          factory.createArrayLiteralExpression([
-                            factory.createIdentifier("arr"),
-                          ])
+                          factory.createIdentifier("values")
                         ),
                         factory.createPropertyAssignment(
                           "rowMode",
@@ -1877,11 +1520,17 @@ function sortDecl(tableName: string, columns: Column[]) {
     [factory.createToken(SyntaxKind.ExportKeyword)],
     factory.createIdentifier(snakeToPascal(tableName) + "Sort"),
     undefined,
-    undefined,
+    [
+      factory.createHeritageClause(SyntaxKind.ExtendsKeyword, [
+        factory.createExpressionWithTypeArguments(
+          factory.createIdentifier("Sort"),
+          undefined
+        ),
+      ]),
+    ],
     [
       factory.createPropertyDeclaration(
         [
-          decoratorDecl("IsDefined"),
           decoratorDecl("IsIn", [
             factory.createArrayLiteralExpression(
               columnNames.flatMap((name) => [
@@ -1899,27 +1548,573 @@ function sortDecl(tableName: string, columns: Column[]) {
         ),
         undefined
       ),
-      factory.createPropertyDeclaration(
-        [
-          decoratorDecl("IsOptional"),
-          decoratorDecl("IsIn", [
-            factory.createArrayLiteralExpression(
-              [
-                factory.createStringLiteral("ASC"),
-                factory.createStringLiteral("DESC"),
-              ],
-              false
+    ]
+  );
+}
+
+function getFilterClauseDecl() {
+  return factory.createFunctionDeclaration(
+    undefined,
+    undefined,
+    "getFilterClause",
+    undefined,
+    [
+      factory.createParameterDeclaration(
+        undefined,
+        undefined,
+        "filter",
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createTypeReferenceNode("any")
+      ),
+    ],
+    factory.createTypeLiteralNode([
+      factory.createPropertySignature(
+        undefined,
+        "filterClause",
+        undefined,
+        factory.createTypeReferenceNode("string")
+      ),
+      factory.createPropertySignature(
+        undefined,
+        "values",
+        undefined,
+        factory.createArrayTypeNode(
+          factory.createKeywordTypeNode(SyntaxKind.AnyKeyword)
+        )
+      ),
+    ]),
+    factory.createBlock(
+      [
+        // const definedProperties = Object.getOwnPropertyNames(filter ?? {}).filter((prop) => filter[prop] != null);
+        factory.createVariableStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                "definedProperties",
+                undefined,
+                undefined,
+                factory.createCallExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createCallExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("Object"),
+                        "getOwnPropertyNames"
+                      ),
+                      undefined,
+
+                      [
+                        factory.createBinaryExpression(
+                          factory.createIdentifier("filter"),
+                          SyntaxKind.QuestionQuestionToken,
+                          factory.createObjectLiteralExpression()
+                        ),
+                      ]
+                    ),
+                    "filter"
+                  ),
+                  undefined,
+                  [
+                    factory.createArrowFunction(
+                      undefined,
+                      undefined,
+                      [
+                        factory.createParameterDeclaration(
+                          undefined,
+                          undefined,
+                          "prop"
+                        ),
+                      ],
+                      undefined,
+                      factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+                      factory.createBinaryExpression(
+                        factory.createElementAccessChain(
+                          factory.createIdentifier("filter"),
+                          factory.createToken(SyntaxKind.QuestionDotToken),
+                          factory.createIdentifier("prop")
+                        ),
+                        ts.SyntaxKind.ExclamationEqualsToken,
+                        factory.createNull()
+                      )
+                    ),
+                  ]
+                )
+              ),
+            ],
+            ts.NodeFlags.Const
+          )
+        ),
+
+        factory.createVariableStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                "filterConditions",
+                undefined,
+                factory.createArrayTypeNode(
+                  factory.createKeywordTypeNode(SyntaxKind.StringKeyword)
+                ),
+                factory.createArrayLiteralExpression([], false)
+              ),
+            ],
+            ts.NodeFlags.Const
+          )
+        ),
+
+        factory.createVariableStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                "values",
+                undefined,
+                factory.createArrayTypeNode(
+                  factory.createKeywordTypeNode(SyntaxKind.AnyKeyword)
+                ),
+                factory.createArrayLiteralExpression([], false)
+              ),
+            ],
+            ts.NodeFlags.Const
+          )
+        ),
+
+        factory.createVariableStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                "counter",
+                undefined,
+                undefined,
+                factory.createNumericLiteral("1")
+              ),
+            ],
+            ts.NodeFlags.Let
+          )
+        ),
+        // for (const prop of definedProperties) {
+        factory.createForOfStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                ts.factory.createIdentifier("prop"),
+                undefined,
+                undefined,
+                undefined
+              ),
+            ],
+            ts.NodeFlags.Const
+          ),
+          factory.createIdentifier("definedProperties"),
+          factory.createBlock([
+            // const value = filter[prop];
+            factory.createVariableStatement(
+              undefined,
+              factory.createVariableDeclarationList(
+                [
+                  factory.createVariableDeclaration(
+                    ts.factory.createIdentifier("value"),
+                    undefined,
+                    undefined,
+                    factory.createElementAccessChain(
+                      factory.createIdentifier("filter"),
+                      factory.createToken(SyntaxKind.QuestionDotToken),
+                      factory.createIdentifier("prop")
+                    )
+                  ),
+                ],
+                ts.NodeFlags.Const
+              )
             ),
-          ]),
-        ],
-        factory.createIdentifier("direction"),
+            // if (Array.isArray(value)) {
+            factory.createIfStatement(
+              factory.createCallExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createIdentifier("Array"),
+                  "isArray"
+                ),
+                undefined,
+                [factory.createIdentifier("value")]
+              ),
+              // then
+              factory.createBlock([
+                // whereConditions.push(`${prop} = ANY($${counter})`);
+                factory.createExpressionStatement(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createIdentifier("filterConditions"),
+                      "push"
+                    ),
+                    undefined,
+                    [
+                      factory.createTemplateExpression(
+                        factory.createTemplateHead("", undefined),
+                        [
+                          factory.createTemplateSpan(
+                            factory.createIdentifier("prop"),
+                            factory.createTemplateMiddle(" = ANY($", undefined)
+                          ),
+                          factory.createTemplateSpan(
+                            factory.createIdentifier("counter"),
+                            factory.createTemplateTail(")", ")")
+                          ),
+                        ]
+                      ),
+                    ]
+                  )
+                ),
+              ]),
+              factory.createBlock([
+                // else
+                // whereConditions.push(`${prop} = $${counter}`);
+                factory.createExpressionStatement(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createIdentifier("filterConditions"),
+                      "push"
+                    ),
+                    undefined,
+                    [
+                      factory.createTemplateExpression(
+                        factory.createTemplateHead("", undefined),
+                        [
+                          factory.createTemplateSpan(
+                            factory.createIdentifier("prop"),
+                            factory.createTemplateMiddle(" = $", undefined)
+                          ),
+                          factory.createTemplateSpan(
+                            factory.createIdentifier("counter"),
+                            factory.createTemplateTail("", undefined)
+                          ),
+                        ]
+                      ),
+                    ]
+                  )
+                ),
+              ])
+            ),
+            // values.push(value);
+            factory.createExpressionStatement(
+              factory.createCallExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createIdentifier("values"),
+                  "push"
+                ),
+                undefined,
+                [factory.createIdentifier("value")]
+              )
+            ),
+            // counter++;
+            factory.createExpressionStatement(
+              factory.createPostfixIncrement(
+                factory.createIdentifier("counter")
+              )
+            ),
+          ])
+        ),
+        // return whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+        factory.createReturnStatement(
+          factory.createObjectLiteralExpression(
+            [
+              factory.createPropertyAssignment(
+                "filterClause",
+                factory.createConditionalExpression(
+                  factory.createBinaryExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createIdentifier("filterConditions"),
+                      "length"
+                    ),
+                    ts.SyntaxKind.GreaterThanToken,
+                    factory.createNumericLiteral("0")
+                  ),
+                  factory.createToken(ts.SyntaxKind.QuestionToken),
+                  factory.createTemplateExpression(
+                    factory.createTemplateHead("WHERE "),
+                    [
+                      factory.createTemplateSpan(
+                        factory.createCallExpression(
+                          factory.createPropertyAccessExpression(
+                            factory.createIdentifier("filterConditions"),
+                            "join"
+                          ),
+                          undefined,
+
+                          [factory.createStringLiteral(" AND ")]
+                        ),
+                        factory.createTemplateTail("", undefined)
+                      ),
+                    ]
+                  ),
+                  factory.createToken(ts.SyntaxKind.ColonToken),
+                  factory.createStringLiteral("")
+                )
+              ),
+              factory.createPropertyAssignment(
+                "values",
+                factory.createIdentifier("values")
+              ),
+            ],
+            true
+          )
+        ),
+      ],
+      true
+    )
+  );
+}
+
+function getSortClauseDecl() {
+  return factory.createFunctionDeclaration(
+    undefined,
+    undefined,
+    "getSortClause",
+    undefined,
+    [
+      factory.createParameterDeclaration(
+        undefined,
+        undefined,
+        "sort",
         factory.createToken(SyntaxKind.QuestionToken),
         factory.createUnionTypeNode([
-          factory.createLiteralTypeNode(factory.createStringLiteral("ASC")),
-          factory.createLiteralTypeNode(factory.createStringLiteral("DESC")),
-        ]),
-        undefined
+          factory.createTypeReferenceNode("Sort"),
+          factory.createArrayTypeNode(factory.createTypeReferenceNode("Sort")),
+        ])
       ),
-    ]
+    ],
+    factory.createTypeReferenceNode("string"),
+    factory.createBlock(
+      [
+        // const sortArr = Array.isArray(sort) ? sort : [sort];
+        factory.createVariableStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                "sortArr",
+                undefined,
+                undefined,
+                factory.createConditionalExpression(
+                  // sort == null ? [] : (Array.isArray(sort) ? sort : [sort]
+                  factory.createBinaryExpression(
+                    factory.createIdentifier("sort"),
+                    ts.SyntaxKind.EqualsEqualsToken,
+                    factory.createNull()
+                  ),
+                  factory.createToken(ts.SyntaxKind.QuestionToken),
+                  factory.createArrayLiteralExpression([], false),
+                  factory.createToken(ts.SyntaxKind.ColonToken),
+                  factory.createConditionalExpression(
+                    factory.createCallExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("Array"),
+                        "isArray"
+                      ),
+                      undefined,
+                      [factory.createIdentifier("sort")]
+                    ),
+                    factory.createToken(ts.SyntaxKind.QuestionToken),
+                    factory.createIdentifier("sort"),
+                    factory.createToken(ts.SyntaxKind.ColonToken),
+                    factory.createArrayLiteralExpression(
+                      [factory.createIdentifier("sort")],
+                      false
+                    )
+                  )
+                )
+              ),
+            ],
+            ts.NodeFlags.Const
+          )
+        ),
+        // const sortExpressions = sortArr.map((sort) => `${sort.column} ${sort.direction ?? ''}`);
+        factory.createVariableStatement(
+          undefined,
+          factory.createVariableDeclarationList(
+            [
+              factory.createVariableDeclaration(
+                "sortExpressions",
+                undefined,
+                undefined,
+                factory.createCallExpression(
+                  factory.createPropertyAccessExpression(
+                    factory.createIdentifier("sortArr"),
+                    "map"
+                  ),
+                  undefined,
+
+                  [
+                    factory.createArrowFunction(
+                      undefined,
+                      undefined,
+                      [
+                        factory.createParameterDeclaration(
+                          undefined,
+                          undefined,
+                          "sort",
+                          undefined,
+                          undefined,
+                          undefined
+                        ),
+                      ],
+
+                      undefined,
+                      factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+                      factory.createTemplateExpression(
+                        factory.createTemplateHead("", undefined),
+                        [
+                          factory.createTemplateSpan(
+                            factory.createPropertyAccessExpression(
+                              factory.createIdentifier("sort"),
+                              "column"
+                            ),
+                            factory.createTemplateMiddle(" ", undefined)
+                          ),
+                          factory.createTemplateSpan(
+                            factory.createBinaryExpression(
+                              factory.createPropertyAccessExpression(
+                                factory.createIdentifier("sort"),
+                                "direction"
+                              ),
+                              ts.SyntaxKind.QuestionQuestionToken,
+                              factory.createStringLiteral("")
+                            ),
+                            factory.createTemplateTail("", undefined)
+                          ),
+                        ]
+                      )
+                    ),
+                  ]
+                )
+              ),
+            ],
+            ts.NodeFlags.Const
+          )
+        ),
+
+        // return sortArr.length === 0 ? '' : `ORDER BY ${sortExpressions.join(', ')}`;
+        factory.createReturnStatement(
+          factory.createConditionalExpression(
+            factory.createBinaryExpression(
+              factory.createPropertyAccessExpression(
+                factory.createIdentifier("sortArr"),
+                "length"
+              ),
+              ts.SyntaxKind.EqualsEqualsEqualsToken,
+              factory.createNumericLiteral("0")
+            ),
+            factory.createToken(ts.SyntaxKind.QuestionToken),
+            factory.createStringLiteral(""),
+            factory.createToken(ts.SyntaxKind.ColonToken),
+            factory.createTemplateExpression(
+              factory.createTemplateHead("ORDER BY "),
+              [
+                factory.createTemplateSpan(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createIdentifier("sortExpressions"),
+                      "join"
+                    ),
+                    undefined,
+                    [factory.createStringLiteral(", ")]
+                  ),
+                  factory.createTemplateTail("", undefined)
+                ),
+              ]
+            )
+          )
+        ),
+      ],
+      true
+    )
+  );
+}
+
+function getPaginationClauseDecl() {
+  return factory.createFunctionDeclaration(
+    undefined,
+    undefined,
+    "getPaginationClause",
+    undefined,
+    [
+      factory.createParameterDeclaration(
+        undefined,
+        undefined,
+        "pagination",
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createTypeReferenceNode("Pagination")
+      ),
+    ],
+    factory.createTypeReferenceNode("string"),
+    factory.createBlock(
+      [
+        // The pagination clause
+        // return `${pagination?.limit != null ? `LIMIT ${pagination.limit}` : ''} ${pagination?.offset != null ? `OFFSET ${pagination.offset}` : ''}`;
+        factory.createReturnStatement(
+          factory.createTemplateExpression(factory.createTemplateHead(""), [
+            factory.createTemplateSpan(
+              factory.createConditionalExpression(
+                factory.createBinaryExpression(
+                  factory.createPropertyAccessChain(
+                    factory.createIdentifier("pagination"),
+                    factory.createToken(SyntaxKind.QuestionDotToken),
+                    factory.createIdentifier("limit")
+                  ),
+                  ts.SyntaxKind.ExclamationEqualsToken,
+                  factory.createNull()
+                ),
+                factory.createToken(ts.SyntaxKind.QuestionToken),
+                factory.createTemplateExpression(
+                  factory.createTemplateHead("LIMIT "),
+                  [
+                    factory.createTemplateSpan(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("pagination"),
+                        factory.createIdentifier("limit")
+                      ),
+                      factory.createTemplateTail("", undefined)
+                    ),
+                  ]
+                ),
+                factory.createToken(ts.SyntaxKind.ColonToken),
+                factory.createStringLiteral("")
+              ),
+              factory.createTemplateMiddle(" ", undefined)
+            ),
+            factory.createTemplateSpan(
+              factory.createConditionalExpression(
+                factory.createBinaryExpression(
+                  factory.createPropertyAccessChain(
+                    factory.createIdentifier("pagination"),
+                    factory.createToken(SyntaxKind.QuestionDotToken),
+                    factory.createIdentifier("offset")
+                  ),
+                  ts.SyntaxKind.ExclamationEqualsToken,
+                  factory.createNull()
+                ),
+                factory.createToken(ts.SyntaxKind.QuestionToken),
+                factory.createTemplateExpression(
+                  factory.createTemplateHead("OFFSET "),
+                  [
+                    factory.createTemplateSpan(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("pagination"),
+                        factory.createIdentifier("offset")
+                      ),
+                      factory.createTemplateTail("", undefined)
+                    ),
+                  ]
+                ),
+                factory.createToken(ts.SyntaxKind.ColonToken),
+                factory.createStringLiteral("")
+              ),
+              factory.createTemplateTail("", undefined)
+            ),
+          ])
+        ),
+      ],
+      true
+    )
   );
 }
