@@ -275,11 +275,14 @@ function decoratorForTypeName(typeName: string, imports: Set<string>) {
 
 function columnDecoratorsDecl(
   column: Column,
-  imports: Set<string>
+  imports: Set<string>,
+  allOptional: boolean = false
 ): ts.Decorator[] {
-  const decorators = [
-    decoratorDecl(column.notNull ? "IsDefined" : "IsOptional"),
-  ];
+  const decorators = [];
+
+  if (!allOptional) {
+    decorators.push(decoratorDecl(column.notNull ? "IsDefined" : "IsOptional"));
+  }
 
   // Some of the type names have the `pgcatalog.` prefix. Remove this.
   let typeName = column.type?.name;
@@ -348,7 +351,23 @@ function insertableDecl(tableName: string, columns: Column[]) {
         ),
       ]),
     ],
-    []
+    [
+      // Since Transforms are not supported in inheritance, we need to redeclare all bigint fields
+      ...columns
+        .filter(excludedFilter)
+        .filter(
+          (col) => col.type?.name === "int8" && col.name !== tableName + "id"
+        )
+        .map((col, i) =>
+          factory.createPropertyDeclaration(
+            columnDecoratorsDecl(col, new Set(), true),
+            factory.createIdentifier(colName(i, col)),
+            factory.createToken(SyntaxKind.QuestionToken),
+            factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+            undefined
+          )
+        ),
+    ]
   );
 }
 
