@@ -363,7 +363,14 @@ function insertableDecl(tableName: string, columns: Column[]) {
             columnDecoratorsDecl(col, new Set(), true),
             factory.createIdentifier(colName(i, col)),
             factory.createToken(SyntaxKind.QuestionToken),
-            factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+            // not-null
+            col.notNull
+              ? factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
+              : // nullable
+                factory.createUnionTypeNode([
+                  factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+                  factory.createLiteralTypeNode(factory.createNull()),
+                ]),
             undefined
           )
         ),
