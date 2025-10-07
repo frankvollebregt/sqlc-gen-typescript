@@ -30,18 +30,36 @@ const excludedFilter = (column: Column) =>
   !excludedColumns.includes(column.name);
 
 /** Output the table models and simple CRUD functions for them */
-export function crudDecl(driver: Driver, tables: Table[]): Node[] {
-  // Output the model (table classes)
-  let nodes: Node[] = [];
+export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
+  // Output the CrudService and its endpoints
+  const nodes: Node[] = [];
+
+  // Output all table declarations
+  const dtoNodes: Node[] = [];
+
+  nodes.push(
+    factory.createImportDeclaration(
+      undefined,
+      // import { * as dto }
+      factory.createImportClause(
+        false,
+        undefined,
+        factory.createNamespaceImport(factory.createIdentifier("dto"))
+      ),
+      factory.createStringLiteral("./crud.dto"),
+      undefined
+    )
+  );
 
   nodes.push(createNamedImportDeclaration(["Injectable"], "@nestjs/common"));
-  nodes.push(
+  dtoNodes.push(
     createNamedImportDeclaration(["PartialType", "OmitType"], "@nestjs/swagger")
   );
 
   const imports = new Set<string>(["IsDefined", "IsOptional", "IsIn", "Min"]);
 
-  const tableNodes = [];
+  const tableNodes: Node[] = [];
+
   for (const table of tables) {
     tableNodes.push(tableDecl(table.rel!.name, driver, table.columns, imports));
     tableNodes.push(insertableDecl(table.rel!.name, table.columns));
@@ -53,11 +71,11 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
   nodes.push(createNamedImportDeclaration(["ClsService"], "nestjs-cls"));
 
   // import { IsDefined, IsOptional, x, y, z } from 'class-validator';
-  nodes.push(
+  dtoNodes.push(
     createNamedImportDeclaration(Array.from(imports), "class-validator")
   );
 
-  nodes.push(
+  dtoNodes.push(
     createNamedImportDeclaration(["IsBigInt"], "src/validators/env.validator")
   );
 
@@ -107,7 +125,7 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
   );
 
   // Class for LIMIT and OFFSET
-  nodes.push(
+  dtoNodes.push(
     factory.createClassDeclaration(
       [factory.createToken(SyntaxKind.ExportKeyword)],
       factory.createIdentifier("Pagination"),
@@ -142,7 +160,7 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
 
   // General class for sorting
   // type Direction = 'ASC' | 'DESC';
-  nodes.push(
+  dtoNodes.push(
     factory.createTypeAliasDeclaration(
       undefined,
       factory.createIdentifier("Direction"),
@@ -154,9 +172,12 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
     )
   );
 
-  nodes.push(
+  dtoNodes.push(
     factory.createClassDeclaration(
-      [factory.createToken(SyntaxKind.AbstractKeyword)],
+      [
+        factory.createToken(SyntaxKind.ExportKeyword),
+        factory.createToken(SyntaxKind.AbstractKeyword),
+      ],
       factory.createIdentifier("Sort"),
       undefined,
       undefined,
@@ -202,7 +223,7 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
   nodes.push(getSortClauseDecl());
   nodes.push(getPaginationClauseDecl());
 
-  nodes.push(...tableNodes);
+  dtoNodes.push(...tableNodes);
 
   const crudNodes: Node[] = [replacerMethodDecl()];
 
@@ -217,7 +238,7 @@ export function crudDecl(driver: Driver, tables: Table[]): Node[] {
 
   nodes.push(nestServiceDecl("CrudService", crudNodes));
 
-  return nodes;
+  return [nodes, dtoNodes];
 }
 
 function tableDecl(
@@ -510,9 +531,21 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
           "entries",
           undefined,
           factory.createUnionTypeNode([
-            factory.createTypeReferenceNode(companionIdentifier),
+            factory.createTypeReferenceNode(
+              factory.createQualifiedName(
+                factory.createIdentifier("dto"),
+                companionIdentifier
+              ),
+              undefined
+            ),
             factory.createArrayTypeNode(
-              factory.createTypeReferenceNode(companionIdentifier)
+              factory.createTypeReferenceNode(
+                factory.createQualifiedName(
+                  factory.createIdentifier("dto"),
+                  companionIdentifier
+                ),
+                undefined
+              )
             ),
           ])
         ),
@@ -722,7 +755,13 @@ function getSelectMethod(table: Table) {
           undefined,
           "filter",
           factory.createToken(ts.SyntaxKind.QuestionToken),
-          factory.createTypeReferenceNode(snakeToPascal(tableName) + "Filter")
+          factory.createTypeReferenceNode(
+            factory.createQualifiedName(
+              factory.createIdentifier("dto"),
+              factory.createIdentifier(snakeToPascal(tableName) + "Filter")
+            ),
+            undefined
+          )
         ),
         factory.createParameterDeclaration(
           undefined,
@@ -730,9 +769,21 @@ function getSelectMethod(table: Table) {
           "sort",
           factory.createToken(ts.SyntaxKind.QuestionToken),
           factory.createUnionTypeNode([
-            factory.createTypeReferenceNode(snakeToPascal(tableName) + "Sort"),
+            factory.createTypeReferenceNode(
+              factory.createQualifiedName(
+                factory.createIdentifier("dto"),
+                factory.createIdentifier(snakeToPascal(tableName) + "Sort")
+              ),
+              undefined
+            ),
             factory.createArrayTypeNode(
-              factory.createTypeReferenceNode(snakeToPascal(tableName) + "Sort")
+              factory.createTypeReferenceNode(
+                factory.createQualifiedName(
+                  factory.createIdentifier("dto"),
+                  factory.createIdentifier(snakeToPascal(tableName) + "Sort")
+                ),
+                undefined
+              )
             ),
           ])
         ),
@@ -741,12 +792,24 @@ function getSelectMethod(table: Table) {
           undefined,
           "pagination",
           factory.createToken(ts.SyntaxKind.QuestionToken),
-          factory.createTypeReferenceNode("Pagination")
+          factory.createTypeReferenceNode(
+            factory.createQualifiedName(
+              factory.createIdentifier("dto"),
+              factory.createIdentifier("Pagination")
+            ),
+            undefined
+          )
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
         factory.createArrayTypeNode(
-          factory.createTypeReferenceNode(snakeToPascal(tableName))
+          factory.createTypeReferenceNode(
+            factory.createQualifiedName(
+              factory.createIdentifier("dto"),
+              factory.createIdentifier(snakeToPascal(tableName))
+            ),
+            undefined
+          )
         ),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
@@ -968,7 +1031,13 @@ function getDeleteMethod(table: Table) {
           undefined,
           "filter",
           factory.createToken(ts.SyntaxKind.QuestionToken),
-          factory.createTypeReferenceNode(snakeToPascal(tableName) + "Filter")
+          factory.createTypeReferenceNode(
+            factory.createQualifiedName(
+              factory.createIdentifier("dto"),
+              factory.createIdentifier(snakeToPascal(tableName) + "Filter")
+            ),
+            undefined
+          )
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
@@ -1120,9 +1189,21 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
           "entries",
           undefined,
           factory.createUnionTypeNode([
-            factory.createTypeReferenceNode(insertableIdentifier),
+            factory.createTypeReferenceNode(
+              factory.createQualifiedName(
+                factory.createIdentifier("dto"),
+                insertableIdentifier
+              ),
+              undefined
+            ),
             factory.createArrayTypeNode(
-              factory.createTypeReferenceNode(insertableIdentifier)
+              factory.createTypeReferenceNode(
+                factory.createQualifiedName(
+                  factory.createIdentifier("dto"),
+                  insertableIdentifier
+                ),
+                undefined
+              )
             ),
           ])
         ),
@@ -2010,8 +2091,22 @@ function getSortClauseDecl() {
         "sort",
         factory.createToken(SyntaxKind.QuestionToken),
         factory.createUnionTypeNode([
-          factory.createTypeReferenceNode("Sort"),
-          factory.createArrayTypeNode(factory.createTypeReferenceNode("Sort")),
+          factory.createTypeReferenceNode(
+            factory.createQualifiedName(
+              factory.createIdentifier("dto"),
+              factory.createIdentifier("Sort")
+            ),
+            undefined
+          ),
+          factory.createArrayTypeNode(
+            factory.createTypeReferenceNode(
+              factory.createQualifiedName(
+                factory.createIdentifier("dto"),
+                factory.createIdentifier("Sort")
+              ),
+              undefined
+            )
+          ),
         ])
       ),
     ],
@@ -2175,7 +2270,13 @@ function getPaginationClauseDecl() {
         undefined,
         "pagination",
         factory.createToken(SyntaxKind.QuestionToken),
-        factory.createTypeReferenceNode("Pagination")
+        factory.createTypeReferenceNode(
+          factory.createQualifiedName(
+            factory.createIdentifier("dto"),
+            factory.createIdentifier("Pagination")
+          ),
+          undefined
+        )
       ),
     ],
     factory.createTypeReferenceNode("string"),

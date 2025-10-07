@@ -118,12 +118,18 @@ function codegen(input: GenerateRequest): GenerateResponse {
 
   const tables = input.catalog?.schemas?.[0].tables;
   if (tables != null) {
-    const crudNodes = crudDecl(driver, tables);
+    const [crudNodes, dtoNodes] = crudDecl(driver, tables);
 
     files.push(
       new File({
         name: "crud.service.g.ts",
         contents: new TextEncoder().encode(printNode(crudNodes)),
+      })
+    );
+    files.push(
+      new File({
+        name: "crud.dto.ts",
+        contents: new TextEncoder().encode(printNode(dtoNodes)),
       })
     );
   }
