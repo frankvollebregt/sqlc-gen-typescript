@@ -289,6 +289,9 @@ function decoratorForTypeName(typeName: string, imports: Set<string>) {
     case "timestamp":
       imports.add("IsISO8601");
       return "IsISO8601";
+    case "time":
+      imports.add("IsMilitaryTime");
+      return "IsMilitaryTime";
     default:
       return null;
   }
