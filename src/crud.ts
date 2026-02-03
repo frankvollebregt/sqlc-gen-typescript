@@ -15,7 +15,6 @@ import {
 } from "./nest";
 import { colName } from "./drivers/utlis";
 import { mapReturnColumnsWithBigInt } from "./bigint";
-import { Syntax } from "@bufbuild/protobuf";
 
 const excludedColumns = [
   "userid",
@@ -44,19 +43,31 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
       factory.createImportClause(
         false,
         undefined,
-        factory.createNamespaceImport(factory.createIdentifier("dto"))
+        factory.createNamespaceImport(factory.createIdentifier("dto")),
       ),
       factory.createStringLiteral("./crud.dto"),
-      undefined
-    )
+      undefined,
+    ),
   );
 
   nodes.push(createNamedImportDeclaration(["Injectable"], "@nestjs/common"));
   dtoNodes.push(
-    createNamedImportDeclaration(["PartialType", "OmitType"], "@nestjs/swagger")
+    createNamedImportDeclaration(
+      ["PartialType", "OmitType"],
+      "@nestjs/swagger",
+    ),
   );
 
-  const imports = new Set<string>(["IsDefined", "IsOptional", "IsIn", "Min"]);
+  const imports = new Set<string>([
+    "IsDefined",
+    "IsOptional",
+    "IsIn",
+    "Min",
+    "IsArray",
+    "ArrayUnique",
+    "ArrayMinSize",
+    "ValidateNested",
+  ]);
 
   const tableNodes: Node[] = [];
 
@@ -66,21 +77,29 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     tableNodes.push(updateableDecl(table.rel!.name, driver, table.columns));
     tableNodes.push(filterDecl(table.rel!.name, driver, table.columns));
     tableNodes.push(sortDecl(table.rel!.name, table.columns));
+    tableNodes.push(selectArgumentsDecl(table.rel!.name, table.columns));
   }
 
   nodes.push(createNamedImportDeclaration(["ClsService"], "nestjs-cls"));
 
   // import { IsDefined, IsOptional, x, y, z } from 'class-validator';
   dtoNodes.push(
-    createNamedImportDeclaration(Array.from(imports), "class-validator")
+    createNamedImportDeclaration(Array.from(imports), "class-validator"),
   );
 
   dtoNodes.push(
-    createNamedImportDeclaration(["IsBigInt"], "src/validators/env.validator")
+    createNamedImportDeclaration(["Type"], "class-transformer-global-storage"),
+  );
+
+  dtoNodes.push(
+    createNamedImportDeclaration(["IsBigInt"], "src/validators/env.validator"),
   );
 
   nodes.push(
-    createNamedImportDeclaration(["QueryArrayConfig", "QueryArrayResult"], "pg")
+    createNamedImportDeclaration(
+      ["QueryArrayConfig", "QueryArrayResult"],
+      "pg",
+    ),
   );
 
   nodes.push(
@@ -104,9 +123,9 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
                 undefined,
                 factory.createTypeReferenceNode(
                   factory.createIdentifier("QueryArrayConfig"),
-                  undefined
+                  undefined,
                 ),
-                undefined
+                undefined,
               ),
             ],
             factory.createTypeReferenceNode(
@@ -114,14 +133,14 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
               [
                 factory.createTypeReferenceNode(
                   factory.createIdentifier("QueryArrayResult"),
-                  undefined
+                  undefined,
                 ),
-              ]
-            )
-          )
+              ],
+            ),
+          ),
         ),
-      ]
-    )
+      ],
+    ),
   );
 
   // Class for LIMIT and OFFSET
@@ -141,7 +160,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
           factory.createIdentifier("limit"),
           factory.createToken(SyntaxKind.QuestionToken),
           factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
-          undefined
+          undefined,
         ),
         factory.createPropertyDeclaration(
           [
@@ -152,10 +171,10 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
           factory.createIdentifier("offset"),
           factory.createToken(SyntaxKind.QuestionToken),
           factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
-          undefined
+          undefined,
         ),
-      ]
-    )
+      ],
+    ),
   );
 
   // General class for sorting
@@ -168,8 +187,8 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
       factory.createUnionTypeNode([
         factory.createLiteralTypeNode(factory.createStringLiteral("ASC")),
         factory.createLiteralTypeNode(factory.createStringLiteral("DESC")),
-      ])
-    )
+      ]),
+    ),
   );
 
   dtoNodes.push(
@@ -191,7 +210,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
           factory.createIdentifier("column"),
           undefined,
           factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
-          undefined
+          undefined,
         ),
         factory.createPropertyDeclaration(
           [
@@ -202,7 +221,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
                   factory.createStringLiteral("ASC"),
                   factory.createStringLiteral("DESC"),
                 ],
-                false
+                false,
               ),
             ]),
           ],
@@ -210,12 +229,12 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
           factory.createToken(SyntaxKind.QuestionToken),
           factory.createTypeReferenceNode(
             factory.createIdentifier("Direction"),
-            undefined
+            undefined,
           ),
-          undefined
+          undefined,
         ),
-      ]
-    )
+      ],
+    ),
   );
 
   // Helpers for select query building
@@ -231,8 +250,8 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     crudNodes.push(
       factory.createAssignment(
         factory.createIdentifier(snakeToCamel(table.rel!.name)),
-        crudTableDecl(table)
-      )
+        crudTableDecl(table),
+      ),
     );
   }
 
@@ -245,7 +264,7 @@ function tableDecl(
   name: string,
   driver: Driver,
   columns: Column[],
-  imports: Set<string>
+  imports: Set<string>,
 ) {
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
@@ -260,9 +279,9 @@ function tableDecl(
           factory.createIdentifier(colName(i, column)),
           undefined,
           driver.columnType(column),
-          undefined
-        )
-      )
+          undefined,
+        ),
+      ),
   );
 }
 
@@ -300,7 +319,7 @@ function decoratorForTypeName(typeName: string, imports: Set<string>) {
 function columnDecoratorsDecl(
   column: Column,
   imports: Set<string>,
-  allOptional: boolean = false
+  allOptional: boolean = false,
 ): ts.Decorator[] {
   const decorators = [];
 
@@ -332,15 +351,15 @@ function decoratorDecl(name: string, args?: Expression[]) {
     factory.createCallExpression(
       factory.createIdentifier(name),
       undefined,
-      args
-    )
+      args,
+    ),
   );
 }
 
 function insertableDecl(tableName: string, columns: Column[]) {
   const identifier = factory.createIdentifier(snakeToPascal(tableName));
   const insertableIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Insertable"
+    snakeToPascal(tableName) + "Insertable",
   );
 
   const hasId = columns.map((col) => col.name).includes(tableName + "id");
@@ -366,12 +385,12 @@ function insertableDecl(tableName: string, columns: Column[]) {
                   factory.createCallExpression(
                     factory.createIdentifier("OmitType"),
                     undefined,
-                    [identifier, factory.createArrayLiteralExpression(omits)]
+                    [identifier, factory.createArrayLiteralExpression(omits)],
                   ),
                 ]
-              : [identifier]
+              : [identifier],
           ),
-          undefined
+          undefined,
         ),
       ]),
     ],
@@ -380,7 +399,7 @@ function insertableDecl(tableName: string, columns: Column[]) {
       ...columns
         .filter(excludedFilter)
         .filter(
-          (col) => col.type?.name === "int8" && col.name !== tableName + "id"
+          (col) => col.type?.name === "int8" && col.name !== tableName + "id",
         )
         .map((col, i) =>
           factory.createPropertyDeclaration(
@@ -395,19 +414,19 @@ function insertableDecl(tableName: string, columns: Column[]) {
                   factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
                   factory.createLiteralTypeNode(factory.createNull()),
                 ]),
-            undefined
-          )
+            undefined,
+          ),
         ),
-    ]
+    ],
   );
 }
 
 function updateableDecl(tableName: string, driver: Driver, columns: Column[]) {
   const updateableIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Updateable"
+    snakeToPascal(tableName) + "Updateable",
   );
   const insertableIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Insertable"
+    snakeToPascal(tableName) + "Insertable",
   );
 
   return factory.createClassDeclaration(
@@ -418,7 +437,7 @@ function updateableDecl(tableName: string, driver: Driver, columns: Column[]) {
       factory.createHeritageClause(ts.SyntaxKind.ExtendsKeyword, [
         factory.createExpressionWithTypeArguments(
           insertableIdentifier,
-          undefined
+          undefined,
         ),
       ]),
     ],
@@ -431,9 +450,9 @@ function updateableDecl(tableName: string, driver: Driver, columns: Column[]) {
           factory.createIdentifier(colName(i, column)),
           undefined,
           driver.columnType(column),
-          undefined
-        )
-      )
+          undefined,
+        ),
+      ),
   );
 }
 
@@ -450,14 +469,14 @@ function replacerMethodDecl(): ts.MethodDeclaration {
         undefined,
         "k",
         undefined,
-        ts.factory.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword)
+        ts.factory.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword),
       ),
       ts.factory.createParameterDeclaration(
         undefined,
         undefined,
         "v",
         undefined,
-        ts.factory.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword)
+        ts.factory.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword),
       ),
     ],
     ts.factory.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword), // return type
@@ -469,11 +488,11 @@ function replacerMethodDecl(): ts.MethodDeclaration {
             ts.factory.createTypeOfExpression(
               ts.factory.createElementAccessExpression(
                 ts.factory.createThis(),
-                ts.factory.createIdentifier("k")
-              )
+                ts.factory.createIdentifier("k"),
+              ),
             ),
             ts.SyntaxKind.EqualsEqualsEqualsToken,
-            ts.factory.createStringLiteral("bigint")
+            ts.factory.createStringLiteral("bigint"),
           ),
           ts.factory.createBlock(
             [
@@ -482,33 +501,33 @@ function replacerMethodDecl(): ts.MethodDeclaration {
                   ts.factory.createPropertyAccessExpression(
                     ts.factory.createElementAccessExpression(
                       ts.factory.createThis(),
-                      ts.factory.createIdentifier("k")
+                      ts.factory.createIdentifier("k"),
                     ),
-                    "toString"
+                    "toString",
                   ),
                   undefined,
-                  []
-                )
+                  [],
+                ),
               ),
             ],
-            true
-          )
+            true,
+          ),
         ),
         // return v;
         ts.factory.createReturnStatement(ts.factory.createIdentifier("v")),
       ],
-      true
-    )
+      true,
+    ),
   );
 }
 
 function crudTableDecl(table: Table): Expression {
   const tableName = table.rel!.name;
   const updateableIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Updateable"
+    snakeToPascal(tableName) + "Updateable",
   );
   const insertableIdentifier = factory.createIdentifier(
-    snakeToPascal(tableName) + "Insertable"
+    snakeToPascal(tableName) + "Insertable",
   );
   return factory.createObjectLiteralExpression(
     [
@@ -517,7 +536,7 @@ function crudTableDecl(table: Table): Expression {
       getDeleteMethod(table),
       getInsertMethod(table, insertableIdentifier),
     ],
-    true
+    true,
   );
 }
 
@@ -537,20 +556,20 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
             factory.createTypeReferenceNode(
               factory.createQualifiedName(
                 factory.createIdentifier("dto"),
-                companionIdentifier
+                companionIdentifier,
               ),
-              undefined
+              undefined,
             ),
             factory.createArrayTypeNode(
               factory.createTypeReferenceNode(
                 factory.createQualifiedName(
                   factory.createIdentifier("dto"),
-                  companionIdentifier
+                  companionIdentifier,
                 ),
-                undefined
-              )
+                undefined,
+              ),
             ),
-          ])
+          ]),
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
@@ -572,23 +591,23 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                     ts.factory.createCallExpression(
                       ts.factory.createPropertyAccessExpression(
                         ts.factory.createIdentifier("Array"),
-                        ts.factory.createIdentifier("isArray")
+                        ts.factory.createIdentifier("isArray"),
                       ),
                       undefined,
-                      [ts.factory.createIdentifier("entries")]
+                      [ts.factory.createIdentifier("entries")],
                     ),
                     ts.factory.createToken(ts.SyntaxKind.QuestionToken),
                     ts.factory.createIdentifier("entries"),
                     ts.factory.createToken(ts.SyntaxKind.ColonToken),
                     ts.factory.createArrayLiteralExpression(
                       [ts.factory.createIdentifier("entries")],
-                      false
-                    )
-                  )
+                      false,
+                    ),
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
           // The query
           ts.factory.createVariableStatement(
@@ -599,11 +618,11 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                   "query",
                   undefined,
                   undefined,
-                  ts.factory.createStringLiteral(getUpdateQueryString(table))
+                  ts.factory.createStringLiteral(getUpdateQueryString(table)),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
           // let rowCount = 0;
           ts.factory.createVariableStatement(
@@ -614,11 +633,11 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                   "rowCount",
                   undefined,
                   undefined,
-                  ts.factory.createNumericLiteral("0")
+                  ts.factory.createNumericLiteral("0"),
                 ),
               ],
-              ts.NodeFlags.Let
-            )
+              ts.NodeFlags.Let,
+            ),
           ),
           // Loop over each entry and update
           ts.factory.createForOfStatement(
@@ -629,10 +648,10 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                   ts.factory.createIdentifier("entry"),
                   undefined,
                   undefined,
-                  undefined
+                  undefined,
                 ),
               ],
-              ts.NodeFlags.Const
+              ts.NodeFlags.Const,
             ),
             ts.factory.createIdentifier("arr"),
             ts.factory.createBlock(
@@ -649,9 +668,9 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                           factory.createPropertyAccessExpression(
                             factory.createPropertyAccessExpression(
                               factory.createThis(),
-                              factory.createIdentifier("client")
+                              factory.createIdentifier("client"),
                             ),
-                            factory.createIdentifier("query")
+                            factory.createIdentifier("query"),
                           ),
                           undefined,
                           [
@@ -659,7 +678,7 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                               [
                                 factory.createPropertyAssignment(
                                   "text",
-                                  factory.createIdentifier("query")
+                                  factory.createIdentifier("query"),
                                 ),
                                 factory.createPropertyAssignment(
                                   "values",
@@ -667,31 +686,31 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                                     factory.createCallExpression(
                                       factory.createPropertyAccessExpression(
                                         factory.createIdentifier("JSON"),
-                                        "stringify"
+                                        "stringify",
                                       ),
                                       undefined,
                                       [
                                         factory.createIdentifier("entry"),
                                         factory.createPropertyAccessExpression(
                                           factory.createThis(),
-                                          factory.createIdentifier("replacer")
+                                          factory.createIdentifier("replacer"),
                                         ),
-                                      ]
+                                      ],
                                     ),
-                                  ])
+                                  ]),
                                 ),
                                 factory.createPropertyAssignment(
                                   "rowMode",
-                                  factory.createStringLiteral("array")
+                                  factory.createStringLiteral("array"),
                                 ),
                               ],
-                              true
+                              true,
                             ),
-                          ]
-                        )
-                      )
+                          ],
+                        ),
+                      ),
                     ),
-                  ])
+                  ]),
                 ),
                 factory.createExpressionStatement(
                   factory.createBinaryExpression(
@@ -701,23 +720,23 @@ function getUpdateMethod(table: Table, companionIdentifier: ts.Identifier) {
                     factory.createBinaryExpression(
                       factory.createPropertyAccessExpression(
                         factory.createIdentifier("result"),
-                        factory.createIdentifier("rowCount")
+                        factory.createIdentifier("rowCount"),
                       ),
                       ts.SyntaxKind.QuestionQuestionToken,
-                      factory.createNumericLiteral("0")
-                    )
-                  )
+                      factory.createNumericLiteral("0"),
+                    ),
+                  ),
                 ),
               ],
-              true
-            )
+              true,
+            ),
           ),
           // return rowCount
           factory.createReturnStatement(factory.createIdentifier("rowCount")),
         ],
-        true
-      )
-    )
+        true,
+      ),
+    ),
   );
 }
 
@@ -737,7 +756,7 @@ function getUpdateQueryString(table: Table): string {
     });
 
   return `WITH input AS (SELECT $1::jsonb AS data) UPDATE ${tableName} SET ${updateLines.join(
-    ", "
+    ", ",
   )} FROM input WHERE ${tableName}.${tableName}id = (data->>'${tableName}id')::bigint;`;
 }
 
@@ -756,52 +775,15 @@ function getSelectMethod(table: Table) {
         factory.createParameterDeclaration(
           undefined,
           undefined,
-          "filter",
+          "args",
           factory.createToken(ts.SyntaxKind.QuestionToken),
           factory.createTypeReferenceNode(
             factory.createQualifiedName(
               factory.createIdentifier("dto"),
-              factory.createIdentifier(snakeToPascal(tableName) + "Filter")
+              factory.createIdentifier(snakeToPascal(tableName) + "SelectArgs"),
             ),
-            undefined
-          )
-        ),
-        factory.createParameterDeclaration(
-          undefined,
-          undefined,
-          "sort",
-          factory.createToken(ts.SyntaxKind.QuestionToken),
-          factory.createUnionTypeNode([
-            factory.createTypeReferenceNode(
-              factory.createQualifiedName(
-                factory.createIdentifier("dto"),
-                factory.createIdentifier(snakeToPascal(tableName) + "Sort")
-              ),
-              undefined
-            ),
-            factory.createArrayTypeNode(
-              factory.createTypeReferenceNode(
-                factory.createQualifiedName(
-                  factory.createIdentifier("dto"),
-                  factory.createIdentifier(snakeToPascal(tableName) + "Sort")
-                ),
-                undefined
-              )
-            ),
-          ])
-        ),
-        factory.createParameterDeclaration(
-          undefined,
-          undefined,
-          "pagination",
-          factory.createToken(ts.SyntaxKind.QuestionToken),
-          factory.createTypeReferenceNode(
-            factory.createQualifiedName(
-              factory.createIdentifier("dto"),
-              factory.createIdentifier("Pagination")
-            ),
-            undefined
-          )
+            undefined,
+          ),
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
@@ -809,15 +791,85 @@ function getSelectMethod(table: Table) {
           factory.createTypeReferenceNode(
             factory.createQualifiedName(
               factory.createIdentifier("dto"),
-              factory.createIdentifier(snakeToPascal(tableName))
+              factory.createIdentifier(snakeToPascal(tableName)),
             ),
-            undefined
-          )
+            undefined,
+          ),
         ),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
+          // Get the select clause
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                // const { columns, filter, sort, pagination } = args ?? {};
+                factory.createVariableDeclaration(
+                  factory.createObjectBindingPattern([
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "columns",
+                      undefined,
+                    ),
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "filter",
+                      undefined,
+                    ),
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "sort",
+                      undefined,
+                    ),
+                    factory.createBindingElement(
+                      undefined,
+                      undefined,
+                      "pagination",
+                      undefined,
+                    ),
+                  ]),
+                  undefined,
+                  undefined,
+                  factory.createBinaryExpression(
+                    factory.createIdentifier("args"),
+                    ts.SyntaxKind.QuestionQuestionToken,
+                    factory.createObjectLiteralExpression([], false),
+                  ),
+                ),
+                factory.createVariableDeclaration(
+                  "columnClause",
+                  undefined,
+                  undefined,
+                  factory.createConditionalExpression(
+                    factory.createBinaryExpression(
+                      factory.createIdentifier("columns"),
+                      ts.SyntaxKind.ExclamationEqualsEqualsToken,
+                      factory.createIdentifier("undefined"),
+                    ),
+                    factory.createToken(ts.SyntaxKind.QuestionToken),
+                    factory.createCallExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createIdentifier("columns"),
+                        "join",
+                      ),
+                      undefined,
+                      [factory.createStringLiteral(", ")],
+                    ),
+
+                    factory.createToken(ts.SyntaxKind.ColonToken),
+                    factory.createStringLiteral("*"),
+                  ),
+                ),
+              ],
+              ts.NodeFlags.Const,
+            ),
+          ),
+
           // Get the filter clause
           factory.createVariableStatement(
             undefined,
@@ -829,13 +881,13 @@ function getSelectMethod(table: Table) {
                       undefined,
                       undefined,
                       "filterClause",
-                      undefined
+                      undefined,
                     ),
                     factory.createBindingElement(
                       undefined,
                       undefined,
                       "values",
-                      undefined
+                      undefined,
                     ),
                   ]),
                   undefined,
@@ -843,12 +895,12 @@ function getSelectMethod(table: Table) {
                   factory.createCallExpression(
                     factory.createIdentifier("getFilterClause"),
                     undefined,
-                    [factory.createIdentifier("filter")]
-                  )
+                    [factory.createIdentifier("filter")],
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
 
           // Get the sort clause
@@ -863,12 +915,12 @@ function getSelectMethod(table: Table) {
                   factory.createCallExpression(
                     factory.createIdentifier("getSortClause"),
                     undefined,
-                    [factory.createIdentifier("sort")]
-                  )
+                    [factory.createIdentifier("sort")],
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
 
           // Get the pagination clause
@@ -883,12 +935,12 @@ function getSelectMethod(table: Table) {
                   factory.createCallExpression(
                     factory.createIdentifier("getPaginationClause"),
                     undefined,
-                    [factory.createIdentifier("pagination")]
-                  )
+                    [factory.createIdentifier("pagination")],
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
 
           // The query
@@ -901,29 +953,34 @@ function getSelectMethod(table: Table) {
                   undefined,
                   undefined,
                   factory.createTemplateExpression(
-                    // i.e. `select * from table ${whereClause} ${sortClause}`
-                    factory.createTemplateHead(
-                      getSelectQueryString(table, columns)
-                    ),
+                    // i.e. `select ${columnClause} from table ${filterClause} ${sortClause} ${paginationClause}`
+                    factory.createTemplateHead("SELECT "),
                     [
                       factory.createTemplateSpan(
+                        factory.createIdentifier("columnClause"),
+                        factory.createTemplateMiddle(
+                          ` FROM ${tableName} `,
+                          undefined,
+                        ),
+                      ),
+                      factory.createTemplateSpan(
                         factory.createIdentifier("filterClause"),
-                        factory.createTemplateMiddle(" ", undefined)
+                        factory.createTemplateMiddle(" ", undefined),
                       ),
                       factory.createTemplateSpan(
                         factory.createIdentifier("sortClause"),
-                        factory.createTemplateMiddle(" ", undefined)
+                        factory.createTemplateMiddle(" ", undefined),
                       ),
                       factory.createTemplateSpan(
                         factory.createIdentifier("paginationClause"),
-                        factory.createTemplateTail("", undefined)
+                        factory.createTemplateTail("", undefined),
                       ),
-                    ]
-                  )
+                    ],
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
 
           // Running the query
@@ -937,9 +994,9 @@ function getSelectMethod(table: Table) {
                   factory.createPropertyAccessExpression(
                     factory.createPropertyAccessExpression(
                       factory.createThis(),
-                      factory.createIdentifier("client")
+                      factory.createIdentifier("client"),
                     ),
-                    factory.createIdentifier("query")
+                    factory.createIdentifier("query"),
                   ),
                   undefined,
                   [
@@ -947,22 +1004,22 @@ function getSelectMethod(table: Table) {
                       [
                         factory.createPropertyAssignment(
                           "text",
-                          factory.createIdentifier("query")
+                          factory.createIdentifier("query"),
                         ),
                         factory.createPropertyAssignment(
                           "values",
-                          factory.createIdentifier("values")
+                          factory.createIdentifier("values"),
                         ),
                         factory.createPropertyAssignment(
                           "rowMode",
-                          factory.createStringLiteral("array")
+                          factory.createStringLiteral("array"),
                         ),
                       ],
-                      true
+                      true,
                     ),
-                  ]
-                )
-              )
+                  ],
+                ),
+              ),
             ),
           ]),
           factory.createReturnStatement(
@@ -970,9 +1027,9 @@ function getSelectMethod(table: Table) {
               factory.createPropertyAccessExpression(
                 factory.createPropertyAccessExpression(
                   factory.createIdentifier("result"),
-                  factory.createIdentifier("rows")
+                  factory.createIdentifier("rows"),
                 ),
-                factory.createIdentifier("map")
+                factory.createIdentifier("map"),
               ),
               undefined,
               [
@@ -986,7 +1043,7 @@ function getSelectMethod(table: Table) {
                       factory.createIdentifier("row"),
                       undefined,
                       undefined,
-                      undefined
+                      undefined,
                     ),
                   ],
                   undefined,
@@ -996,20 +1053,20 @@ function getSelectMethod(table: Table) {
                       factory.createReturnStatement(
                         factory.createObjectLiteralExpression(
                           columns.map(mapReturnColumnsWithBigInt),
-                          true
-                        )
+                          true,
+                        ),
                       ),
                     ],
-                    true
-                  )
+                    true,
+                  ),
                 ),
-              ]
-            )
+              ],
+            ),
           ),
         ],
-        true
-      )
-    )
+        true,
+      ),
+    ),
   );
 }
 
@@ -1037,10 +1094,10 @@ function getDeleteMethod(table: Table) {
           factory.createTypeReferenceNode(
             factory.createQualifiedName(
               factory.createIdentifier("dto"),
-              factory.createIdentifier(snakeToPascal(tableName) + "Filter")
+              factory.createIdentifier(snakeToPascal(tableName) + "Filter"),
             ),
-            undefined
-          )
+            undefined,
+          ),
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
@@ -1060,13 +1117,13 @@ function getDeleteMethod(table: Table) {
                       undefined,
                       undefined,
                       "filterClause",
-                      undefined
+                      undefined,
                     ),
                     factory.createBindingElement(
                       undefined,
                       undefined,
                       "values",
-                      undefined
+                      undefined,
                     ),
                   ]),
                   undefined,
@@ -1074,12 +1131,12 @@ function getDeleteMethod(table: Table) {
                   factory.createCallExpression(
                     factory.createIdentifier("getFilterClause"),
                     undefined,
-                    [factory.createIdentifier("filter")]
-                  )
+                    [factory.createIdentifier("filter")],
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
 
           // The query
@@ -1097,14 +1154,14 @@ function getDeleteMethod(table: Table) {
                     [
                       factory.createTemplateSpan(
                         factory.createIdentifier("filterClause"),
-                        factory.createTemplateTail("", undefined)
+                        factory.createTemplateTail("", undefined),
                       ),
-                    ]
-                  )
+                    ],
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
 
           // Running the query
@@ -1118,9 +1175,9 @@ function getDeleteMethod(table: Table) {
                   factory.createPropertyAccessExpression(
                     factory.createPropertyAccessExpression(
                       factory.createThis(),
-                      factory.createIdentifier("client")
+                      factory.createIdentifier("client"),
                     ),
-                    factory.createIdentifier("query")
+                    factory.createIdentifier("query"),
                   ),
                   undefined,
                   [
@@ -1128,22 +1185,22 @@ function getDeleteMethod(table: Table) {
                       [
                         factory.createPropertyAssignment(
                           "text",
-                          factory.createIdentifier("query")
+                          factory.createIdentifier("query"),
                         ),
                         factory.createPropertyAssignment(
                           "values",
-                          factory.createIdentifier("values")
+                          factory.createIdentifier("values"),
                         ),
                         factory.createPropertyAssignment(
                           "rowMode",
-                          factory.createStringLiteral("array")
+                          factory.createStringLiteral("array"),
                         ),
                       ],
-                      true
+                      true,
                     ),
-                  ]
-                )
-              )
+                  ],
+                ),
+              ),
             ),
           ]),
           // return result.rowCount ?? 0
@@ -1151,16 +1208,16 @@ function getDeleteMethod(table: Table) {
             factory.createBinaryExpression(
               factory.createPropertyAccessExpression(
                 factory.createIdentifier("result"),
-                factory.createIdentifier("rowCount")
+                factory.createIdentifier("rowCount"),
               ),
               ts.SyntaxKind.QuestionQuestionToken,
-              factory.createNumericLiteral("0")
-            )
+              factory.createNumericLiteral("0"),
+            ),
           ),
         ],
-        true
-      )
-    )
+        true,
+      ),
+    ),
   );
 }
 
@@ -1175,7 +1232,7 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
         const name = col.name;
         const type = col.type?.name;
         return [name, type ?? "TEXT"];
-      })
+      }),
   );
 
   // The insert method takes in a PartialType of the table class, omitting the primary key
@@ -1195,25 +1252,25 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
             factory.createTypeReferenceNode(
               factory.createQualifiedName(
                 factory.createIdentifier("dto"),
-                insertableIdentifier
+                insertableIdentifier,
               ),
-              undefined
+              undefined,
             ),
             factory.createArrayTypeNode(
               factory.createTypeReferenceNode(
                 factory.createQualifiedName(
                   factory.createIdentifier("dto"),
-                  insertableIdentifier
+                  insertableIdentifier,
                 ),
-                undefined
-              )
+                undefined,
+              ),
             ),
-          ])
+          ]),
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
         factory.createArrayTypeNode(
-          factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
+          factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
         ),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
@@ -1232,23 +1289,23 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                     ts.factory.createCallExpression(
                       ts.factory.createPropertyAccessExpression(
                         ts.factory.createIdentifier("Array"),
-                        ts.factory.createIdentifier("isArray")
+                        ts.factory.createIdentifier("isArray"),
                       ),
                       undefined,
-                      [ts.factory.createIdentifier("entries")]
+                      [ts.factory.createIdentifier("entries")],
                     ),
                     ts.factory.createToken(ts.SyntaxKind.QuestionToken),
                     ts.factory.createIdentifier("entries"),
                     ts.factory.createToken(ts.SyntaxKind.ColonToken),
                     ts.factory.createArrayLiteralExpression(
                       [ts.factory.createIdentifier("entries")],
-                      false
-                    )
-                  )
+                      false,
+                    ),
+                  ),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
           // const ids: bigint[] = [];
           ts.factory.createVariableStatement(
@@ -1259,13 +1316,13 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                   "ids",
                   undefined,
                   ts.factory.createArrayTypeNode(
-                    ts.factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword)
+                    ts.factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
                   ),
-                  ts.factory.createArrayLiteralExpression([], false)
+                  ts.factory.createArrayLiteralExpression([], false),
                 ),
               ],
-              ts.NodeFlags.Const
-            )
+              ts.NodeFlags.Const,
+            ),
           ),
           // Loop over each entry and insert
           ts.factory.createForOfStatement(
@@ -1276,10 +1333,10 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                   ts.factory.createIdentifier("entry"),
                   undefined,
                   undefined,
-                  undefined
+                  undefined,
                 ),
               ],
-              ts.NodeFlags.Const
+              ts.NodeFlags.Const,
             ),
             ts.factory.createIdentifier("arr"),
             ts.factory.createBlock(
@@ -1302,16 +1359,16 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                 ts.factory.createArrayLiteralExpression([
                                   ts.factory.createStringLiteral(name),
                                   ts.factory.createStringLiteral(type),
-                                ])
+                                ]),
                               ),
-                              true
+                              true,
                             ),
-                          ]
-                        )
+                          ],
+                        ),
                       ),
                     ],
-                    ts.NodeFlags.Const
-                  )
+                    ts.NodeFlags.Const,
+                  ),
                 ),
                 // The columnTypes map, filtered on names that are actually present
                 ts.factory.createVariableStatement(
@@ -1331,12 +1388,12 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                 ts.factory.createCallExpression(
                                   ts.factory.createPropertyAccessExpression(
                                     ts.factory.createIdentifier("Object"),
-                                    "getOwnPropertyNames"
+                                    "getOwnPropertyNames",
                                   ),
                                   undefined,
-                                  [ts.factory.createIdentifier("entry")]
+                                  [ts.factory.createIdentifier("entry")],
                                 ),
-                                "map"
+                                "map",
                               ),
                               undefined,
                               [
@@ -1347,35 +1404,35 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                     ts.factory.createParameterDeclaration(
                                       undefined,
                                       undefined,
-                                      "name"
+                                      "name",
                                     ),
                                   ],
                                   undefined,
                                   ts.factory.createToken(
-                                    ts.SyntaxKind.EqualsGreaterThanToken
+                                    ts.SyntaxKind.EqualsGreaterThanToken,
                                   ),
                                   ts.factory.createArrayLiteralExpression([
                                     ts.factory.createIdentifier("name"),
                                     ts.factory.createCallExpression(
                                       ts.factory.createPropertyAccessExpression(
                                         ts.factory.createIdentifier(
-                                          "columnTypes"
+                                          "columnTypes",
                                         ),
-                                        "get"
+                                        "get",
                                       ),
                                       undefined,
-                                      [ts.factory.createIdentifier("name")]
+                                      [ts.factory.createIdentifier("name")],
                                     ),
-                                  ])
+                                  ]),
                                 ),
-                              ]
+                              ],
                             ),
-                          ]
-                        )
+                          ],
+                        ),
                       ),
                     ],
-                    ts.NodeFlags.Const
-                  )
+                    ts.NodeFlags.Const,
+                  ),
                 ),
                 // Create the query
                 ts.factory.createVariableStatement(
@@ -1388,7 +1445,7 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                         undefined,
                         factory.createTemplateExpression(
                           factory.createTemplateHead(
-                            `WITH input AS (SELECT $1::jsonb AS data) INSERT INTO ${tableName} (`
+                            `WITH input AS (SELECT $1::jsonb AS data) INSERT INTO ${tableName} (`,
                           ),
                           [
                             factory.createTemplateSpan(
@@ -1397,28 +1454,28 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                   factory.createCallExpression(
                                     factory.createPropertyAccessExpression(
                                       factory.createIdentifier("Array"),
-                                      "from"
+                                      "from",
                                     ),
                                     undefined,
                                     [
                                       factory.createCallExpression(
                                         factory.createPropertyAccessExpression(
                                           factory.createIdentifier(
-                                            "filteredColumnTypes"
+                                            "filteredColumnTypes",
                                           ),
-                                          "keys"
+                                          "keys",
                                         ),
                                         undefined,
-                                        undefined
+                                        undefined,
                                       ),
-                                    ]
+                                    ],
                                   ),
-                                  "join"
+                                  "join",
                                 ),
                                 undefined,
-                                [factory.createStringLiteral(", ")]
+                                [factory.createStringLiteral(", ")],
                               ),
-                              factory.createTemplateMiddle(") SELECT ")
+                              factory.createTemplateMiddle(") SELECT "),
                             ),
                             factory.createTemplateSpan(
                               ts.factory.createCallExpression(
@@ -1426,23 +1483,25 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                   factory.createCallExpression(
                                     factory.createPropertyAccessExpression(
                                       factory.createIdentifier("Array"),
-                                      "from"
+                                      "from",
                                     ),
                                     undefined,
                                     [
                                       ts.factory.createCallExpression(
                                         ts.factory.createPropertyAccessExpression(
                                           ts.factory.createIdentifier(
-                                            "filteredColumnTypes"
+                                            "filteredColumnTypes",
                                           ),
-                                          ts.factory.createIdentifier("entries")
+                                          ts.factory.createIdentifier(
+                                            "entries",
+                                          ),
                                         ),
                                         undefined,
-                                        []
+                                        [],
                                       ),
-                                    ]
+                                    ],
                                   ),
-                                  ts.factory.createIdentifier("map")
+                                  ts.factory.createIdentifier("map"),
                                 ),
                                 undefined,
                                 [
@@ -1458,59 +1517,59 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                           ts.factory.createBindingElement(
                                             undefined,
                                             undefined,
-                                            "name"
+                                            "name",
                                           ),
                                           ts.factory.createBindingElement(
                                             undefined,
                                             undefined,
-                                            "type"
+                                            "type",
                                           ),
-                                        ])
+                                        ]),
                                       ),
                                     ],
                                     undefined,
                                     ts.factory.createToken(
-                                      ts.SyntaxKind.EqualsGreaterThanToken
+                                      ts.SyntaxKind.EqualsGreaterThanToken,
                                     ),
                                     ts.factory.createTemplateExpression(
                                       ts.factory.createTemplateHead(
-                                        "(data->>'"
+                                        "(data->>'",
                                       ),
                                       [
                                         ts.factory.createTemplateSpan(
                                           ts.factory.createIdentifier("name"),
                                           ts.factory.createTemplateMiddle(
-                                            "')::"
-                                          )
+                                            "')::",
+                                          ),
                                         ),
                                         ts.factory.createTemplateSpan(
                                           ts.factory.createBinaryExpression(
                                             ts.factory.createIdentifier("type"),
                                             ts.factory.createToken(
                                               ts.SyntaxKind
-                                                .QuestionQuestionToken
+                                                .QuestionQuestionToken,
                                             ),
                                             ts.factory.createStringLiteral(
-                                              "TEXT"
-                                            )
+                                              "TEXT",
+                                            ),
                                           ),
-                                          ts.factory.createTemplateTail("")
+                                          ts.factory.createTemplateTail(""),
                                         ),
-                                      ]
-                                    )
+                                      ],
+                                    ),
                                   ),
-                                ]
+                                ],
                               ),
                               factory.createTemplateTail(
-                                ` FROM input RETURNING ${tableName}id;`
-                              )
+                                ` FROM input RETURNING ${tableName}id;`,
+                              ),
                             ),
-                          ]
-                        )
+                          ],
+                        ),
                       ),
                     ],
-                    ts.NodeFlags.Const
-                  )
+                    ts.NodeFlags.Const,
+                  ),
                 ),
                 // Running the query
                 factory.createVariableStatement(
@@ -1525,9 +1584,9 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                           factory.createPropertyAccessExpression(
                             factory.createPropertyAccessExpression(
                               factory.createThis(),
-                              factory.createIdentifier("client")
+                              factory.createIdentifier("client"),
                             ),
-                            factory.createIdentifier("query")
+                            factory.createIdentifier("query"),
                           ),
                           undefined,
                           [
@@ -1535,7 +1594,7 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                               [
                                 factory.createPropertyAssignment(
                                   "text",
-                                  factory.createIdentifier("query")
+                                  factory.createIdentifier("query"),
                                 ),
                                 factory.createPropertyAssignment(
                                   "values",
@@ -1543,31 +1602,31 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                                     factory.createCallExpression(
                                       factory.createPropertyAccessExpression(
                                         factory.createIdentifier("JSON"),
-                                        "stringify"
+                                        "stringify",
                                       ),
                                       undefined,
                                       [
                                         factory.createIdentifier("entry"),
                                         factory.createPropertyAccessExpression(
                                           factory.createThis(),
-                                          factory.createIdentifier("replacer")
+                                          factory.createIdentifier("replacer"),
                                         ),
-                                      ]
+                                      ],
                                     ),
-                                  ])
+                                  ]),
                                 ),
                                 factory.createPropertyAssignment(
                                   "rowMode",
-                                  factory.createStringLiteral("array")
+                                  factory.createStringLiteral("array"),
                                 ),
                               ],
-                              true
+                              true,
                             ),
-                          ]
-                        )
-                      )
+                          ],
+                        ),
+                      ),
                     ),
-                  ])
+                  ]),
                 ),
                 // const id = BigInt(result.rows[0][0]);
                 factory.createVariableStatement(
@@ -1579,33 +1638,33 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                         undefined,
                         factory.createUnionTypeNode([
                           factory.createKeywordTypeNode(
-                            SyntaxKind.StringKeyword
+                            SyntaxKind.StringKeyword,
                           ),
                           factory.createKeywordTypeNode(
-                            SyntaxKind.UndefinedKeyword
+                            SyntaxKind.UndefinedKeyword,
                           ),
                         ]),
                         factory.createElementAccessExpression(
                           factory.createElementAccessExpression(
                             factory.createPropertyAccessExpression(
                               factory.createIdentifier("result"),
-                              factory.createIdentifier("rows")
+                              factory.createIdentifier("rows"),
                             ),
-                            factory.createIdentifier("0")
+                            factory.createIdentifier("0"),
                           ),
-                          factory.createIdentifier("0")
-                        )
+                          factory.createIdentifier("0"),
+                        ),
                       ),
                     ],
-                    NodeFlags.Const
-                  )
+                    NodeFlags.Const,
+                  ),
                 ),
 
                 factory.createIfStatement(
                   factory.createBinaryExpression(
                     factory.createIdentifier("id"),
                     SyntaxKind.ExclamationEqualsToken,
-                    factory.createNull()
+                    factory.createNull(),
                   ),
                   factory.createBlock(
                     [
@@ -1614,33 +1673,33 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                         factory.createCallExpression(
                           factory.createPropertyAccessExpression(
                             factory.createIdentifier("ids"),
-                            "push"
+                            "push",
                           ),
                           undefined,
                           [
                             factory.createCallExpression(
                               factory.createIdentifier("BigInt"),
                               undefined,
-                              [factory.createIdentifier("id")]
+                              [factory.createIdentifier("id")],
                             ),
-                          ]
-                        )
+                          ],
+                        ),
                       ),
                     ],
-                    false
+                    false,
                   ),
-                  undefined
+                  undefined,
                 ),
               ],
-              true
-            )
+              true,
+            ),
           ),
           // Return the inserted ids
           factory.createReturnStatement(factory.createIdentifier("ids")),
         ],
-        true
-      )
-    )
+        true,
+      ),
+    ),
   );
 }
 
@@ -1660,24 +1719,114 @@ function getTryCatch(statements: ts.Statement[]) {
               [
                 ts.factory.createPropertyAccessExpression(
                   ts.factory.createIdentifier("e"),
-                  ts.factory.createIdentifier("message")
+                  ts.factory.createIdentifier("message"),
                 ),
-              ]
-            )
+              ],
+            ),
           ),
         ],
-        true
-      )
+        true,
+      ),
     ),
     // finally block (none)
-    undefined
+    undefined,
+  );
+}
+
+function selectArgumentsDecl(
+  name: string,
+  columns: Column[],
+): ts.ClassDeclaration {
+  return factory.createClassDeclaration(
+    [factory.createToken(SyntaxKind.ExportKeyword)],
+    factory.createIdentifier(`${snakeToPascal(name)}SelectArgs`),
+    undefined,
+    undefined,
+    [
+      factory.createPropertyDeclaration(
+        [
+          decoratorDecl("IsOptional"),
+          decoratorDecl("IsArray"),
+          decoratorDecl("ArrayUnique"),
+          decoratorDecl("ArrayMinSize", [factory.createNumericLiteral("1")]),
+          decoratorDecl("IsIn", [
+            factory.createArrayLiteralExpression(
+              columns
+                .filter(excludedFilter)
+                .map((col) => factory.createStringLiteral(col.name)),
+              true,
+            ),
+            factory.createObjectLiteralExpression([
+              factory.createPropertyAssignment("each", factory.createTrue()),
+            ]),
+          ]),
+        ],
+        factory.createIdentifier("columns"),
+        undefined,
+        factory.createArrayTypeNode(
+          factory.createTypeOperatorNode(
+            SyntaxKind.KeyOfKeyword,
+            factory.createTypeReferenceNode(snakeToPascal(name)),
+          ),
+        ),
+        undefined,
+      ),
+      factory.createPropertyDeclaration(
+        [decoratorDecl("IsOptional"), decoratorDecl("ValidateNested")],
+        factory.createIdentifier("filter"),
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createTypeReferenceNode(
+          factory.createIdentifier(`${snakeToPascal(name)}Filter`),
+        ),
+        undefined,
+      ),
+      factory.createPropertyDeclaration(
+        // @Type(() => BedrijvenSort)
+        [
+          decoratorDecl("IsOptional"),
+          decoratorDecl("ValidateNested"),
+          decoratorDecl("Type", [
+            factory.createArrowFunction(
+              undefined,
+              undefined,
+              [],
+              undefined,
+              factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+              factory.createIdentifier(`${snakeToPascal(name)}Sort`),
+            ),
+          ]),
+        ],
+        factory.createIdentifier("sort"),
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createUnionTypeNode([
+          factory.createTypeReferenceNode(
+            factory.createIdentifier(`${snakeToPascal(name)}Sort`),
+            undefined,
+          ),
+          factory.createArrayTypeNode(
+            factory.createTypeReferenceNode(
+              factory.createIdentifier(`${snakeToPascal(name)}Sort`),
+              undefined,
+            ),
+          ),
+        ]),
+        undefined,
+      ),
+      factory.createPropertyDeclaration(
+        [decoratorDecl("IsOptional"), decoratorDecl("ValidateNested")],
+        factory.createIdentifier("pagination"),
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createTypeReferenceNode("Pagination"),
+        undefined,
+      ),
+    ],
   );
 }
 
 function filterDecl(
   name: string,
   driver: Driver,
-  columns: Column[]
+  columns: Column[],
 ): ts.ClassDeclaration {
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
@@ -1689,7 +1838,7 @@ function filterDecl(
 
       const typeDecoratorName = decoratorForTypeName(
         column.type!.name,
-        new Set()
+        new Set(),
       );
 
       if (typeDecoratorName != null) {
@@ -1701,7 +1850,7 @@ function filterDecl(
               factory.createObjectLiteralExpression([
                 factory.createPropertyAssignment("each", factory.createTrue()),
               ]),
-            ])
+            ]),
           );
         } else {
           // By default, options is the first argument
@@ -1710,7 +1859,7 @@ function filterDecl(
               factory.createObjectLiteralExpression([
                 factory.createPropertyAssignment("each", factory.createTrue()),
               ]),
-            ])
+            ]),
           );
         }
       }
@@ -1723,9 +1872,9 @@ function filterDecl(
           driver.columnType(column),
           factory.createArrayTypeNode(driver.columnType(column)),
         ]),
-        undefined
+        undefined,
       );
-    })
+    }),
   );
 }
 
@@ -1740,7 +1889,7 @@ function sortDecl(tableName: string, columns: Column[]) {
       factory.createHeritageClause(SyntaxKind.ExtendsKeyword, [
         factory.createExpressionWithTypeArguments(
           factory.createIdentifier("Sort"),
-          undefined
+          undefined,
         ),
       ]),
     ],
@@ -1752,7 +1901,7 @@ function sortDecl(tableName: string, columns: Column[]) {
               columnNames.flatMap((name) => [
                 factory.createStringLiteral(name),
               ]),
-              true
+              true,
             ),
           ]),
         ],
@@ -1760,11 +1909,11 @@ function sortDecl(tableName: string, columns: Column[]) {
         undefined,
         factory.createTypeOperatorNode(
           SyntaxKind.KeyOfKeyword,
-          factory.createTypeReferenceNode(snakeToPascal(tableName))
+          factory.createTypeReferenceNode(snakeToPascal(tableName)),
         ),
-        undefined
+        undefined,
       ),
-    ]
+    ],
   );
 }
 
@@ -1780,7 +1929,7 @@ function getFilterClauseDecl() {
         undefined,
         "filter",
         factory.createToken(SyntaxKind.QuestionToken),
-        factory.createTypeReferenceNode("any")
+        factory.createTypeReferenceNode("any"),
       ),
     ],
     factory.createTypeLiteralNode([
@@ -1788,15 +1937,15 @@ function getFilterClauseDecl() {
         undefined,
         "filterClause",
         undefined,
-        factory.createTypeReferenceNode("string")
+        factory.createTypeReferenceNode("string"),
       ),
       factory.createPropertySignature(
         undefined,
         "values",
         undefined,
         factory.createArrayTypeNode(
-          factory.createKeywordTypeNode(SyntaxKind.AnyKeyword)
-        )
+          factory.createKeywordTypeNode(SyntaxKind.AnyKeyword),
+        ),
       ),
     ]),
     factory.createBlock(
@@ -1815,7 +1964,7 @@ function getFilterClauseDecl() {
                     factory.createCallExpression(
                       factory.createPropertyAccessExpression(
                         factory.createIdentifier("Object"),
-                        "getOwnPropertyNames"
+                        "getOwnPropertyNames",
                       ),
                       undefined,
 
@@ -1823,11 +1972,11 @@ function getFilterClauseDecl() {
                         factory.createBinaryExpression(
                           factory.createIdentifier("filter"),
                           SyntaxKind.QuestionQuestionToken,
-                          factory.createObjectLiteralExpression()
+                          factory.createObjectLiteralExpression(),
                         ),
-                      ]
+                      ],
                     ),
-                    "filter"
+                    "filter",
                   ),
                   undefined,
                   [
@@ -1838,7 +1987,7 @@ function getFilterClauseDecl() {
                         factory.createParameterDeclaration(
                           undefined,
                           undefined,
-                          "prop"
+                          "prop",
                         ),
                       ],
                       undefined,
@@ -1847,18 +1996,18 @@ function getFilterClauseDecl() {
                         factory.createElementAccessChain(
                           factory.createIdentifier("filter"),
                           factory.createToken(SyntaxKind.QuestionDotToken),
-                          factory.createIdentifier("prop")
+                          factory.createIdentifier("prop"),
                         ),
                         ts.SyntaxKind.ExclamationEqualsToken,
-                        factory.createNull()
-                      )
+                        factory.createNull(),
+                      ),
                     ),
-                  ]
-                )
+                  ],
+                ),
               ),
             ],
-            ts.NodeFlags.Const
-          )
+            ts.NodeFlags.Const,
+          ),
         ),
 
         factory.createVariableStatement(
@@ -1869,13 +2018,13 @@ function getFilterClauseDecl() {
                 "filterConditions",
                 undefined,
                 factory.createArrayTypeNode(
-                  factory.createKeywordTypeNode(SyntaxKind.StringKeyword)
+                  factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
                 ),
-                factory.createArrayLiteralExpression([], false)
+                factory.createArrayLiteralExpression([], false),
               ),
             ],
-            ts.NodeFlags.Const
-          )
+            ts.NodeFlags.Const,
+          ),
         ),
 
         factory.createVariableStatement(
@@ -1886,13 +2035,13 @@ function getFilterClauseDecl() {
                 "values",
                 undefined,
                 factory.createArrayTypeNode(
-                  factory.createKeywordTypeNode(SyntaxKind.AnyKeyword)
+                  factory.createKeywordTypeNode(SyntaxKind.AnyKeyword),
                 ),
-                factory.createArrayLiteralExpression([], false)
+                factory.createArrayLiteralExpression([], false),
               ),
             ],
-            ts.NodeFlags.Const
-          )
+            ts.NodeFlags.Const,
+          ),
         ),
 
         factory.createVariableStatement(
@@ -1903,11 +2052,11 @@ function getFilterClauseDecl() {
                 "counter",
                 undefined,
                 undefined,
-                factory.createNumericLiteral("1")
+                factory.createNumericLiteral("1"),
               ),
             ],
-            ts.NodeFlags.Let
-          )
+            ts.NodeFlags.Let,
+          ),
         ),
         // for (const prop of definedProperties) {
         factory.createForOfStatement(
@@ -1918,10 +2067,10 @@ function getFilterClauseDecl() {
                 ts.factory.createIdentifier("prop"),
                 undefined,
                 undefined,
-                undefined
+                undefined,
               ),
             ],
-            ts.NodeFlags.Const
+            ts.NodeFlags.Const,
           ),
           factory.createIdentifier("definedProperties"),
           factory.createBlock([
@@ -1937,22 +2086,22 @@ function getFilterClauseDecl() {
                     factory.createElementAccessChain(
                       factory.createIdentifier("filter"),
                       factory.createToken(SyntaxKind.QuestionDotToken),
-                      factory.createIdentifier("prop")
-                    )
+                      factory.createIdentifier("prop"),
+                    ),
                   ),
                 ],
-                ts.NodeFlags.Const
-              )
+                ts.NodeFlags.Const,
+              ),
             ),
             // if (Array.isArray(value)) {
             factory.createIfStatement(
               factory.createCallExpression(
                 factory.createPropertyAccessExpression(
                   factory.createIdentifier("Array"),
-                  "isArray"
+                  "isArray",
                 ),
                 undefined,
-                [factory.createIdentifier("value")]
+                [factory.createIdentifier("value")],
               ),
               // then
               factory.createBlock([
@@ -1961,7 +2110,7 @@ function getFilterClauseDecl() {
                   factory.createCallExpression(
                     factory.createPropertyAccessExpression(
                       factory.createIdentifier("filterConditions"),
-                      "push"
+                      "push",
                     ),
                     undefined,
                     [
@@ -1970,16 +2119,16 @@ function getFilterClauseDecl() {
                         [
                           factory.createTemplateSpan(
                             factory.createIdentifier("prop"),
-                            factory.createTemplateMiddle(" = ANY($", undefined)
+                            factory.createTemplateMiddle(" = ANY($", undefined),
                           ),
                           factory.createTemplateSpan(
                             factory.createIdentifier("counter"),
-                            factory.createTemplateTail(")", ")")
+                            factory.createTemplateTail(")", ")"),
                           ),
-                        ]
+                        ],
                       ),
-                    ]
-                  )
+                    ],
+                  ),
                 ),
               ]),
               factory.createBlock([
@@ -1989,7 +2138,7 @@ function getFilterClauseDecl() {
                   factory.createCallExpression(
                     factory.createPropertyAccessExpression(
                       factory.createIdentifier("filterConditions"),
-                      "push"
+                      "push",
                     ),
                     undefined,
                     [
@@ -1998,37 +2147,37 @@ function getFilterClauseDecl() {
                         [
                           factory.createTemplateSpan(
                             factory.createIdentifier("prop"),
-                            factory.createTemplateMiddle(" = $", undefined)
+                            factory.createTemplateMiddle(" = $", undefined),
                           ),
                           factory.createTemplateSpan(
                             factory.createIdentifier("counter"),
-                            factory.createTemplateTail("", undefined)
+                            factory.createTemplateTail("", undefined),
                           ),
-                        ]
+                        ],
                       ),
-                    ]
-                  )
+                    ],
+                  ),
                 ),
-              ])
+              ]),
             ),
             // values.push(value);
             factory.createExpressionStatement(
               factory.createCallExpression(
                 factory.createPropertyAccessExpression(
                   factory.createIdentifier("values"),
-                  "push"
+                  "push",
                 ),
                 undefined,
-                [factory.createIdentifier("value")]
-              )
+                [factory.createIdentifier("value")],
+              ),
             ),
             // counter++;
             factory.createExpressionStatement(
               factory.createPostfixIncrement(
-                factory.createIdentifier("counter")
-              )
+                factory.createIdentifier("counter"),
+              ),
             ),
-          ])
+          ]),
         ),
         // return whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         factory.createReturnStatement(
@@ -2040,10 +2189,10 @@ function getFilterClauseDecl() {
                   factory.createBinaryExpression(
                     factory.createPropertyAccessExpression(
                       factory.createIdentifier("filterConditions"),
-                      "length"
+                      "length",
                     ),
                     ts.SyntaxKind.GreaterThanToken,
-                    factory.createNumericLiteral("0")
+                    factory.createNumericLiteral("0"),
                   ),
                   factory.createToken(ts.SyntaxKind.QuestionToken),
                   factory.createTemplateExpression(
@@ -2053,31 +2202,31 @@ function getFilterClauseDecl() {
                         factory.createCallExpression(
                           factory.createPropertyAccessExpression(
                             factory.createIdentifier("filterConditions"),
-                            "join"
+                            "join",
                           ),
                           undefined,
 
-                          [factory.createStringLiteral(" AND ")]
+                          [factory.createStringLiteral(" AND ")],
                         ),
-                        factory.createTemplateTail("", undefined)
+                        factory.createTemplateTail("", undefined),
                       ),
-                    ]
+                    ],
                   ),
                   factory.createToken(ts.SyntaxKind.ColonToken),
-                  factory.createStringLiteral("")
-                )
+                  factory.createStringLiteral(""),
+                ),
               ),
               factory.createPropertyAssignment(
                 "values",
-                factory.createIdentifier("values")
+                factory.createIdentifier("values"),
               ),
             ],
-            true
-          )
+            true,
+          ),
         ),
       ],
-      true
-    )
+      true,
+    ),
   );
 }
 
@@ -2097,20 +2246,20 @@ function getSortClauseDecl() {
           factory.createTypeReferenceNode(
             factory.createQualifiedName(
               factory.createIdentifier("dto"),
-              factory.createIdentifier("Sort")
+              factory.createIdentifier("Sort"),
             ),
-            undefined
+            undefined,
           ),
           factory.createArrayTypeNode(
             factory.createTypeReferenceNode(
               factory.createQualifiedName(
                 factory.createIdentifier("dto"),
-                factory.createIdentifier("Sort")
+                factory.createIdentifier("Sort"),
               ),
-              undefined
-            )
+              undefined,
+            ),
           ),
-        ])
+        ]),
       ),
     ],
     factory.createTypeReferenceNode("string"),
@@ -2130,7 +2279,7 @@ function getSortClauseDecl() {
                   factory.createBinaryExpression(
                     factory.createIdentifier("sort"),
                     ts.SyntaxKind.EqualsEqualsToken,
-                    factory.createNull()
+                    factory.createNull(),
                   ),
                   factory.createToken(ts.SyntaxKind.QuestionToken),
                   factory.createArrayLiteralExpression([], false),
@@ -2139,24 +2288,24 @@ function getSortClauseDecl() {
                     factory.createCallExpression(
                       factory.createPropertyAccessExpression(
                         factory.createIdentifier("Array"),
-                        "isArray"
+                        "isArray",
                       ),
                       undefined,
-                      [factory.createIdentifier("sort")]
+                      [factory.createIdentifier("sort")],
                     ),
                     factory.createToken(ts.SyntaxKind.QuestionToken),
                     factory.createIdentifier("sort"),
                     factory.createToken(ts.SyntaxKind.ColonToken),
                     factory.createArrayLiteralExpression(
                       [factory.createIdentifier("sort")],
-                      false
-                    )
-                  )
-                )
+                      false,
+                    ),
+                  ),
+                ),
               ),
             ],
-            ts.NodeFlags.Const
-          )
+            ts.NodeFlags.Const,
+          ),
         ),
         // const sortExpressions = sortArr.map((sort) => `${sort.column} ${sort.direction ?? ''}`);
         factory.createVariableStatement(
@@ -2170,7 +2319,7 @@ function getSortClauseDecl() {
                 factory.createCallExpression(
                   factory.createPropertyAccessExpression(
                     factory.createIdentifier("sortArr"),
-                    "map"
+                    "map",
                   ),
                   undefined,
 
@@ -2185,7 +2334,7 @@ function getSortClauseDecl() {
                           "sort",
                           undefined,
                           undefined,
-                          undefined
+                          undefined,
                         ),
                       ],
 
@@ -2197,30 +2346,30 @@ function getSortClauseDecl() {
                           factory.createTemplateSpan(
                             factory.createPropertyAccessExpression(
                               factory.createIdentifier("sort"),
-                              "column"
+                              "column",
                             ),
-                            factory.createTemplateMiddle(" ", undefined)
+                            factory.createTemplateMiddle(" ", undefined),
                           ),
                           factory.createTemplateSpan(
                             factory.createBinaryExpression(
                               factory.createPropertyAccessExpression(
                                 factory.createIdentifier("sort"),
-                                "direction"
+                                "direction",
                               ),
                               ts.SyntaxKind.QuestionQuestionToken,
-                              factory.createStringLiteral("")
+                              factory.createStringLiteral(""),
                             ),
-                            factory.createTemplateTail("", undefined)
+                            factory.createTemplateTail("", undefined),
                           ),
-                        ]
-                      )
+                        ],
+                      ),
                     ),
-                  ]
-                )
+                  ],
+                ),
               ),
             ],
-            ts.NodeFlags.Const
-          )
+            ts.NodeFlags.Const,
+          ),
         ),
 
         // return sortArr.length === 0 ? '' : `ORDER BY ${sortExpressions.join(', ')}`;
@@ -2229,10 +2378,10 @@ function getSortClauseDecl() {
             factory.createBinaryExpression(
               factory.createPropertyAccessExpression(
                 factory.createIdentifier("sortArr"),
-                "length"
+                "length",
               ),
               ts.SyntaxKind.EqualsEqualsEqualsToken,
-              factory.createNumericLiteral("0")
+              factory.createNumericLiteral("0"),
             ),
             factory.createToken(ts.SyntaxKind.QuestionToken),
             factory.createStringLiteral(""),
@@ -2244,20 +2393,20 @@ function getSortClauseDecl() {
                   factory.createCallExpression(
                     factory.createPropertyAccessExpression(
                       factory.createIdentifier("sortExpressions"),
-                      "join"
+                      "join",
                     ),
                     undefined,
-                    [factory.createStringLiteral(", ")]
+                    [factory.createStringLiteral(", ")],
                   ),
-                  factory.createTemplateTail("", undefined)
+                  factory.createTemplateTail("", undefined),
                 ),
-              ]
-            )
-          )
+              ],
+            ),
+          ),
         ),
       ],
-      true
-    )
+      true,
+    ),
   );
 }
 
@@ -2276,10 +2425,10 @@ function getPaginationClauseDecl() {
         factory.createTypeReferenceNode(
           factory.createQualifiedName(
             factory.createIdentifier("dto"),
-            factory.createIdentifier("Pagination")
+            factory.createIdentifier("Pagination"),
           ),
-          undefined
-        )
+          undefined,
+        ),
       ),
     ],
     factory.createTypeReferenceNode("string"),
@@ -2295,10 +2444,10 @@ function getPaginationClauseDecl() {
                   factory.createPropertyAccessChain(
                     factory.createIdentifier("pagination"),
                     factory.createToken(SyntaxKind.QuestionDotToken),
-                    factory.createIdentifier("limit")
+                    factory.createIdentifier("limit"),
                   ),
                   ts.SyntaxKind.ExclamationEqualsToken,
-                  factory.createNull()
+                  factory.createNull(),
                 ),
                 factory.createToken(ts.SyntaxKind.QuestionToken),
                 factory.createTemplateExpression(
@@ -2307,16 +2456,16 @@ function getPaginationClauseDecl() {
                     factory.createTemplateSpan(
                       factory.createPropertyAccessExpression(
                         factory.createIdentifier("pagination"),
-                        factory.createIdentifier("limit")
+                        factory.createIdentifier("limit"),
                       ),
-                      factory.createTemplateTail("", undefined)
+                      factory.createTemplateTail("", undefined),
                     ),
-                  ]
+                  ],
                 ),
                 factory.createToken(ts.SyntaxKind.ColonToken),
-                factory.createStringLiteral("")
+                factory.createStringLiteral(""),
               ),
-              factory.createTemplateMiddle(" ", undefined)
+              factory.createTemplateMiddle(" ", undefined),
             ),
             factory.createTemplateSpan(
               factory.createConditionalExpression(
@@ -2324,10 +2473,10 @@ function getPaginationClauseDecl() {
                   factory.createPropertyAccessChain(
                     factory.createIdentifier("pagination"),
                     factory.createToken(SyntaxKind.QuestionDotToken),
-                    factory.createIdentifier("offset")
+                    factory.createIdentifier("offset"),
                   ),
                   ts.SyntaxKind.ExclamationEqualsToken,
-                  factory.createNull()
+                  factory.createNull(),
                 ),
                 factory.createToken(ts.SyntaxKind.QuestionToken),
                 factory.createTemplateExpression(
@@ -2336,21 +2485,21 @@ function getPaginationClauseDecl() {
                     factory.createTemplateSpan(
                       factory.createPropertyAccessExpression(
                         factory.createIdentifier("pagination"),
-                        factory.createIdentifier("offset")
+                        factory.createIdentifier("offset"),
                       ),
-                      factory.createTemplateTail("", undefined)
+                      factory.createTemplateTail("", undefined),
                     ),
-                  ]
+                  ],
                 ),
                 factory.createToken(ts.SyntaxKind.ColonToken),
-                factory.createStringLiteral("")
+                factory.createStringLiteral(""),
               ),
-              factory.createTemplateTail("", undefined)
+              factory.createTemplateTail("", undefined),
             ),
-          ])
+          ]),
         ),
       ],
-      true
-    )
+      true,
+    ),
   );
 }
