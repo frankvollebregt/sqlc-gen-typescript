@@ -1533,395 +1533,337 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
               ts.NodeFlags.Const,
             ),
           ),
-          // const ids: bigint[] = [];
+          // const keys = Object.keys(arr[0]);
           ts.factory.createVariableStatement(
             undefined,
             ts.factory.createVariableDeclarationList(
               [
                 ts.factory.createVariableDeclaration(
-                  "ids",
+                  "keys",
                   undefined,
-                  ts.factory.createArrayTypeNode(
-                    ts.factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+                  undefined,
+                  ts.factory.createCallExpression(
+                    ts.factory.createPropertyAccessExpression(
+                      ts.factory.createIdentifier("Object"),
+                      "keys",
+                    ),
+                    undefined,
+                    [
+                      ts.factory.createElementAccessExpression(
+                        ts.factory.createIdentifier("arr"),
+                        ts.factory.createNumericLiteral("0"),
+                      ),
+                    ],
                   ),
-                  ts.factory.createArrayLiteralExpression([], false),
                 ),
               ],
               ts.NodeFlags.Const,
             ),
           ),
-          // Loop over each entry and insert
-          ts.factory.createForOfStatement(
+          // Define the columnTypes map
+          ts.factory.createVariableStatement(
             undefined,
             ts.factory.createVariableDeclarationList(
               [
                 ts.factory.createVariableDeclaration(
-                  ts.factory.createIdentifier("entry"),
+                  "columnTypes",
                   undefined,
                   undefined,
-                  undefined,
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier("Map"),
+                    undefined,
+                    [
+                      ts.factory.createArrayLiteralExpression(
+                        Array.from(columnTypes).map(([name, type]) =>
+                          ts.factory.createArrayLiteralExpression([
+                            ts.factory.createStringLiteral(name),
+                            ts.factory.createStringLiteral(type),
+                          ]),
+                        ),
+                        true,
+                      ),
+                    ],
+                  ),
                 ),
               ],
               ts.NodeFlags.Const,
             ),
-            ts.factory.createIdentifier("arr"),
-            ts.factory.createBlock(
+          ),
+
+          // const filteredColumnTypes = new Map(keys.map(name => [name, columnTypes.get(name)]));
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
               [
-                // Define the columnTypes map
-                ts.factory.createVariableStatement(
+                ts.factory.createVariableDeclaration(
+                  "filteredColumnTypes",
                   undefined,
-                  ts.factory.createVariableDeclarationList(
+
+                  undefined,
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier("Map"),
+                    undefined,
                     [
-                      ts.factory.createVariableDeclaration(
-                        "columnTypes",
-                        undefined,
-                        undefined,
-                        ts.factory.createNewExpression(
-                          ts.factory.createIdentifier("Map"),
-                          undefined,
-                          [
-                            ts.factory.createArrayLiteralExpression(
-                              Array.from(columnTypes).map(([name, type]) =>
-                                ts.factory.createArrayLiteralExpression([
-                                  ts.factory.createStringLiteral(name),
-                                  ts.factory.createStringLiteral(type),
-                                ]),
-                              ),
-                              true,
-                            ),
-                          ],
+                      ts.factory.createCallExpression(
+                        ts.factory.createPropertyAccessExpression(
+                          ts.factory.createIdentifier("keys"),
+                          "map",
                         ),
+                        undefined,
+                        [
+                          ts.factory.createArrowFunction(
+                            undefined,
+                            undefined,
+                            [
+                              ts.factory.createParameterDeclaration(
+                                undefined,
+                                undefined,
+                                "name",
+                              ),
+                            ],
+                            undefined,
+                            ts.factory.createToken(
+                              ts.SyntaxKind.EqualsGreaterThanToken,
+                            ),
+                            ts.factory.createArrayLiteralExpression([
+                              ts.factory.createIdentifier("name"),
+                              ts.factory.createCallExpression(
+                                ts.factory.createPropertyAccessExpression(
+                                  ts.factory.createIdentifier("columnTypes"),
+                                  "get",
+                                ),
+                                undefined,
+                                [ts.factory.createIdentifier("name")],
+                              ),
+                            ]),
+                          ),
+                        ],
                       ),
                     ],
-                    ts.NodeFlags.Const,
                   ),
                 ),
-                // The columnTypes map, filtered on names that are actually present
-                ts.factory.createVariableStatement(
+              ],
+              ts.NodeFlags.Const,
+            ),
+          ),
+
+          // Create the query
+          ts.factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList(
+              [
+                ts.factory.createVariableDeclaration(
+                  "query",
                   undefined,
-                  ts.factory.createVariableDeclarationList(
+                  undefined,
+                  factory.createTemplateExpression(
+                    factory.createTemplateHead(`INSERT INTO ${tableName} (`),
                     [
-                      ts.factory.createVariableDeclaration(
-                        "filteredColumnTypes",
-                        undefined,
-                        undefined,
-                        ts.factory.createNewExpression(
-                          ts.factory.createIdentifier("Map"),
+                      factory.createTemplateSpan(
+                        // ${keys.join(", ")}
+                        factory.createCallExpression(
+                          factory.createPropertyAccessExpression(
+                            factory.createIdentifier("keys"),
+                            "join",
+                          ),
                           undefined,
-                          [
+                          [factory.createStringLiteral(", ")],
+                        ),
+                        factory.createTemplateMiddle(
+                          ") SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(",
+                        ),
+                      ),
+                      factory.createTemplateSpan(
+                        // ${Array.from(filteredColumnTypes.entries()).map(([name, type]) => `${name} ${type ?? "TEXT"}`)}
+                        ts.factory.createCallExpression(
+                          ts.factory.createPropertyAccessExpression(
                             ts.factory.createCallExpression(
                               ts.factory.createPropertyAccessExpression(
-                                ts.factory.createCallExpression(
-                                  ts.factory.createPropertyAccessExpression(
-                                    ts.factory.createIdentifier("Object"),
-                                    "getOwnPropertyNames",
-                                  ),
-                                  undefined,
-                                  [ts.factory.createIdentifier("entry")],
-                                ),
-                                "map",
+                                ts.factory.createIdentifier("Array"),
+                                "from",
                               ),
                               undefined,
                               [
-                                ts.factory.createArrowFunction(
+                                ts.factory.createCallExpression(
+                                  ts.factory.createPropertyAccessExpression(
+                                    ts.factory.createIdentifier(
+                                      "filteredColumnTypes",
+                                    ),
+                                    ts.factory.createIdentifier("entries"),
+                                  ),
+                                  undefined,
+                                  [],
+                                ),
+                              ],
+                            ),
+                            ts.factory.createIdentifier("map"),
+                          ),
+                          undefined,
+                          [
+                            ts.factory.createArrowFunction(
+                              undefined,
+                              undefined,
+                              [
+                                ts.factory.createParameterDeclaration(
                                   undefined,
                                   undefined,
-                                  [
-                                    ts.factory.createParameterDeclaration(
+                                  ts.factory.createArrayBindingPattern([
+                                    ts.factory.createBindingElement(
                                       undefined,
                                       undefined,
                                       "name",
                                     ),
-                                  ],
-                                  undefined,
-                                  ts.factory.createToken(
-                                    ts.SyntaxKind.EqualsGreaterThanToken,
-                                  ),
-                                  ts.factory.createArrayLiteralExpression([
-                                    ts.factory.createIdentifier("name"),
-                                    ts.factory.createCallExpression(
-                                      ts.factory.createPropertyAccessExpression(
-                                        ts.factory.createIdentifier(
-                                          "columnTypes",
-                                        ),
-                                        "get",
-                                      ),
+                                    ts.factory.createBindingElement(
                                       undefined,
-                                      [ts.factory.createIdentifier("name")],
+                                      undefined,
+                                      "type",
                                     ),
                                   ]),
                                 ),
                               ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    ts.NodeFlags.Const,
-                  ),
-                ),
-                // Create the query
-                ts.factory.createVariableStatement(
-                  undefined,
-                  ts.factory.createVariableDeclarationList(
-                    [
-                      ts.factory.createVariableDeclaration(
-                        "query",
-                        undefined,
-                        undefined,
-                        factory.createTemplateExpression(
-                          factory.createTemplateHead(
-                            `WITH input AS (SELECT $1::jsonb AS data) INSERT INTO ${tableName} (`,
-                          ),
-                          [
-                            factory.createTemplateSpan(
-                              factory.createCallExpression(
-                                factory.createPropertyAccessExpression(
-                                  factory.createCallExpression(
-                                    factory.createPropertyAccessExpression(
-                                      factory.createIdentifier("Array"),
-                                      "from",
-                                    ),
-                                    undefined,
-                                    [
-                                      factory.createCallExpression(
-                                        factory.createPropertyAccessExpression(
-                                          factory.createIdentifier(
-                                            "filteredColumnTypes",
-                                          ),
-                                          "keys",
-                                        ),
-                                        undefined,
-                                        undefined,
-                                      ),
-                                    ],
-                                  ),
-                                  "join",
-                                ),
-                                undefined,
-                                [factory.createStringLiteral(", ")],
+                              undefined,
+                              ts.factory.createToken(
+                                ts.SyntaxKind.EqualsGreaterThanToken,
                               ),
-                              factory.createTemplateMiddle(") SELECT "),
-                            ),
-                            factory.createTemplateSpan(
-                              ts.factory.createCallExpression(
-                                ts.factory.createPropertyAccessExpression(
-                                  factory.createCallExpression(
-                                    factory.createPropertyAccessExpression(
-                                      factory.createIdentifier("Array"),
-                                      "from",
-                                    ),
-                                    undefined,
-                                    [
-                                      ts.factory.createCallExpression(
-                                        ts.factory.createPropertyAccessExpression(
-                                          ts.factory.createIdentifier(
-                                            "filteredColumnTypes",
-                                          ),
-                                          ts.factory.createIdentifier(
-                                            "entries",
-                                          ),
-                                        ),
-                                        undefined,
-                                        [],
-                                      ),
-                                    ],
-                                  ),
-                                  ts.factory.createIdentifier("map"),
-                                ),
-                                undefined,
+                              ts.factory.createTemplateExpression(
+                                ts.factory.createTemplateHead(""),
                                 [
-                                  ts.factory.createArrowFunction(
-                                    undefined,
-                                    undefined,
-                                    [
-                                      ts.factory.createParameterDeclaration(
-                                        undefined,
-                                        undefined,
-
-                                        ts.factory.createArrayBindingPattern([
-                                          ts.factory.createBindingElement(
-                                            undefined,
-                                            undefined,
-                                            "name",
-                                          ),
-                                          ts.factory.createBindingElement(
-                                            undefined,
-                                            undefined,
-                                            "type",
-                                          ),
-                                        ]),
+                                  ts.factory.createTemplateSpan(
+                                    ts.factory.createIdentifier("name"),
+                                    ts.factory.createTemplateMiddle(" "),
+                                  ),
+                                  ts.factory.createTemplateSpan(
+                                    ts.factory.createBinaryExpression(
+                                      ts.factory.createIdentifier("type"),
+                                      ts.factory.createToken(
+                                        ts.SyntaxKind.QuestionQuestionToken,
                                       ),
-                                    ],
-                                    undefined,
-                                    ts.factory.createToken(
-                                      ts.SyntaxKind.EqualsGreaterThanToken,
+                                      ts.factory.createStringLiteral("TEXT"),
                                     ),
-                                    ts.factory.createTemplateExpression(
-                                      ts.factory.createTemplateHead(
-                                        "(data->>'",
-                                      ),
-                                      [
-                                        ts.factory.createTemplateSpan(
-                                          ts.factory.createIdentifier("name"),
-                                          ts.factory.createTemplateMiddle(
-                                            "')::",
-                                          ),
-                                        ),
-                                        ts.factory.createTemplateSpan(
-                                          ts.factory.createBinaryExpression(
-                                            ts.factory.createIdentifier("type"),
-                                            ts.factory.createToken(
-                                              ts.SyntaxKind
-                                                .QuestionQuestionToken,
-                                            ),
-                                            ts.factory.createStringLiteral(
-                                              "TEXT",
-                                            ),
-                                          ),
-                                          ts.factory.createTemplateTail(""),
-                                        ),
-                                      ],
-                                    ),
+                                    ts.factory.createTemplateTail(""),
                                   ),
                                 ],
                               ),
-                              factory.createTemplateTail(
-                                ` FROM input RETURNING ${tableName}id;`,
-                              ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                    ts.NodeFlags.Const,
-                  ),
-                ),
-                // Running the query
-                factory.createVariableStatement(
-                  undefined,
-                  ts.factory.createVariableDeclarationList([
-                    ts.factory.createVariableDeclaration(
-                      "result",
-                      undefined,
-                      undefined,
-                      factory.createAwaitExpression(
-                        factory.createCallExpression(
-                          factory.createPropertyAccessExpression(
-                            factory.createPropertyAccessExpression(
-                              factory.createThis(),
-                              factory.createIdentifier("client"),
-                            ),
-                            factory.createIdentifier("query"),
-                          ),
-                          undefined,
-                          [
-                            factory.createObjectLiteralExpression(
-                              [
-                                factory.createPropertyAssignment(
-                                  "text",
-                                  factory.createIdentifier("query"),
-                                ),
-                                factory.createPropertyAssignment(
-                                  "values",
-                                  factory.createArrayLiteralExpression([
-                                    factory.createCallExpression(
-                                      factory.createPropertyAccessExpression(
-                                        factory.createIdentifier("JSON"),
-                                        "stringify",
-                                      ),
-                                      undefined,
-                                      [
-                                        factory.createIdentifier("entry"),
-                                        factory.createPropertyAccessExpression(
-                                          factory.createThis(),
-                                          factory.createIdentifier("replacer"),
-                                        ),
-                                      ],
-                                    ),
-                                  ]),
-                                ),
-                                factory.createPropertyAssignment(
-                                  "rowMode",
-                                  factory.createStringLiteral("array"),
-                                ),
-                              ],
-                              true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ]),
-                ),
-                // const id = BigInt(result.rows[0][0]);
-                factory.createVariableStatement(
-                  undefined,
-                  factory.createVariableDeclarationList(
-                    [
-                      factory.createVariableDeclaration(
-                        "id",
-                        undefined,
-                        factory.createUnionTypeNode([
-                          factory.createKeywordTypeNode(
-                            SyntaxKind.StringKeyword,
-                          ),
-                          factory.createKeywordTypeNode(
-                            SyntaxKind.UndefinedKeyword,
-                          ),
-                        ]),
-                        factory.createElementAccessExpression(
-                          factory.createElementAccessExpression(
-                            factory.createPropertyAccessExpression(
-                              factory.createIdentifier("result"),
-                              factory.createIdentifier("rows"),
-                            ),
-                            factory.createIdentifier("0"),
-                          ),
-                          factory.createIdentifier("0"),
+                        factory.createTemplateTail(
+                          `) RETURNING ${tableName}id;`,
                         ),
                       ),
                     ],
-                    NodeFlags.Const,
                   ),
-                ),
-
-                factory.createIfStatement(
-                  factory.createBinaryExpression(
-                    factory.createIdentifier("id"),
-                    SyntaxKind.ExclamationEqualsToken,
-                    factory.createNull(),
-                  ),
-                  factory.createBlock(
-                    [
-                      // ids.push(id);
-                      factory.createExpressionStatement(
-                        factory.createCallExpression(
-                          factory.createPropertyAccessExpression(
-                            factory.createIdentifier("ids"),
-                            "push",
-                          ),
-                          undefined,
-                          [
-                            factory.createCallExpression(
-                              factory.createIdentifier("BigInt"),
-                              undefined,
-                              [factory.createIdentifier("id")],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    false,
-                  ),
-                  undefined,
                 ),
               ],
-              true,
+              ts.NodeFlags.Const,
             ),
           ),
-          // Return the inserted ids
-          factory.createReturnStatement(factory.createIdentifier("ids")),
+          // Running the query
+          factory.createVariableStatement(
+            undefined,
+            ts.factory.createVariableDeclarationList([
+              ts.factory.createVariableDeclaration(
+                "result",
+                undefined,
+                undefined,
+                factory.createAwaitExpression(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createPropertyAccessExpression(
+                        factory.createThis(),
+                        factory.createIdentifier("client"),
+                      ),
+                      factory.createIdentifier("query"),
+                    ),
+                    undefined,
+                    [
+                      factory.createObjectLiteralExpression(
+                        [
+                          factory.createPropertyAssignment(
+                            "text",
+                            factory.createIdentifier("query"),
+                          ),
+                          factory.createPropertyAssignment(
+                            "values",
+                            factory.createArrayLiteralExpression([
+                              factory.createCallExpression(
+                                factory.createPropertyAccessExpression(
+                                  factory.createIdentifier("JSON"),
+                                  "stringify",
+                                ),
+                                undefined,
+                                [
+                                  factory.createIdentifier("arr"),
+                                  factory.createPropertyAccessExpression(
+                                    factory.createThis(),
+                                    factory.createIdentifier("replacer"),
+                                  ),
+                                ],
+                              ),
+                            ]),
+                          ),
+                          factory.createPropertyAssignment(
+                            "rowMode",
+                            factory.createStringLiteral("array"),
+                          ),
+                        ],
+                        true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ]),
+          ),
+
+          // const ids = result.rows.map((row) => BigInt(row[0]));
+          factory.createReturnStatement(
+            factory.createCallExpression(
+              factory.createPropertyAccessExpression(
+                factory.createPropertyAccessExpression(
+                  factory.createIdentifier("result"),
+                  factory.createIdentifier("rows"),
+                ),
+                factory.createIdentifier("map"),
+              ),
+              undefined,
+              [
+                factory.createArrowFunction(
+                  undefined,
+                  undefined,
+                  [
+                    factory.createParameterDeclaration(
+                      undefined,
+                      undefined,
+                      "row",
+                      undefined,
+                      undefined,
+                      undefined,
+                    ),
+                  ],
+                  undefined,
+                  factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                  factory.createBlock(
+                    [
+                      factory.createReturnStatement(
+                        factory.createCallExpression(
+                          factory.createIdentifier("BigInt"),
+                          undefined,
+                          [
+                            factory.createElementAccessExpression(
+                              factory.createIdentifier("row"),
+                              factory.createNumericLiteral("0"),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    true,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
         true,
       ),
