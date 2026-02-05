@@ -50,7 +50,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     ),
   );
 
-  nodes.push(createNamedImportDeclaration(["Injectable"], "@nestjs/common"));
+  nodes.push(createNamedImportDeclaration(["Injectable", "UnprocessableEntityException"], "@nestjs/common"));
   dtoNodes.push(
     createNamedImportDeclaration(
       ["PartialType", "OmitType"],
@@ -1556,8 +1556,95 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
                     ],
                   ),
                 ),
+                // const keySet = new Set(keys);
+                factory.createVariableDeclaration(
+                  "keySet",
+                  undefined,
+                  undefined,
+                  factory.createNewExpression(
+                    factory.createIdentifier("Set"),
+                    undefined,
+                    [ts.factory.createIdentifier("keys")],
+                  ),
+                ),
               ],
               ts.NodeFlags.Const,
+            ),
+          ),
+          // Validate that all entries have the same keys
+          // if (!arr.every((e) => new Set(Object.keys(e)).symmetricDifference(keySet).size === 0,)) {
+          //   throw Error('All entries in a CRUD insert must have the same keys!');
+          // }
+          ts.factory.createIfStatement(
+            ts.factory.createPrefixUnaryExpression(
+              ts.SyntaxKind.ExclamationToken,
+              ts.factory.createCallExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createIdentifier("arr"),
+                  "every",
+                ),
+                undefined,
+                [
+                  ts.factory.createArrowFunction(
+                    undefined,
+                    undefined,
+                    [
+                      ts.factory.createParameterDeclaration(
+                        undefined,
+                        undefined,
+                        "e",
+                      ),
+                    ],
+                    undefined,
+                    factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                    ts.factory.createBinaryExpression(
+                      factory.createPropertyAccessExpression(
+                        ts.factory.createCallExpression(
+                          ts.factory.createPropertyAccessExpression(
+                            ts.factory.createNewExpression(
+                              ts.factory.createIdentifier("Set"),
+                              undefined,
+                              [
+                                ts.factory.createCallExpression(
+                                  ts.factory.createPropertyAccessExpression(
+                                    ts.factory.createIdentifier("Object"),
+                                    "keys",
+                                  ),
+                                  undefined,
+                                  [ts.factory.createIdentifier("e")],
+                                ),
+                              ],
+                            ),
+                            "symmetricDifference",
+                          ),
+                          undefined,
+                          [ts.factory.createIdentifier("keySet")],
+                        ),
+                        factory.createIdentifier("size"),
+                      ),
+                      ts.SyntaxKind.EqualsEqualsEqualsToken,
+
+                      ts.factory.createNumericLiteral("0"),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ts.factory.createBlock(
+              [
+                ts.factory.createThrowStatement(
+                  ts.factory.createNewExpression(
+                    ts.factory.createIdentifier("UnprocessableEntityException"),
+                    undefined,
+                    [
+                      ts.factory.createStringLiteral(
+                        "All entries in a CRUD insert must have the same keys!",
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              true,
             ),
           ),
           // Define the columnTypes map
