@@ -770,7 +770,26 @@ function getSelectMethod(table: Table) {
     "select",
     factory.createArrowFunction(
       [factory.createModifier(ts.SyntaxKind.AsyncKeyword)],
-      undefined,
+      // <K extends (keyof dto.tablename)[]>
+      [
+        factory.createTypeParameterDeclaration(
+          undefined,
+          factory.createIdentifier("K"),
+          factory.createArrayTypeNode(
+            factory.createTypeOperatorNode(
+              SyntaxKind.KeyOfKeyword,
+              factory.createTypeReferenceNode(
+                factory.createQualifiedName(
+                  factory.createIdentifier("dto"),
+                  factory.createIdentifier(snakeToPascal(tableName)),
+                ),
+                undefined,
+              ),
+            ),
+          ),
+          undefined,
+        ),
+      ],
       [
         factory.createParameterDeclaration(
           undefined,
@@ -782,24 +801,54 @@ function getSelectMethod(table: Table) {
               factory.createIdentifier("dto"),
               factory.createIdentifier(snakeToPascal(tableName) + "SelectArgs"),
             ),
-            undefined,
+            [
+              factory.createTypeReferenceNode(
+                factory.createIdentifier("K"),
+                undefined,
+              ),
+            ],
           ),
         ),
       ],
       factory.createTypeReferenceNode("Promise", [
         factory.createArrayTypeNode(
-          factory.createTypeReferenceNode(
-            factory.createQualifiedName(
-              factory.createIdentifier("dto"),
-              factory.createIdentifier(snakeToPascal(tableName)),
+          factory.createTypeReferenceNode("Pick", [
+            factory.createTypeReferenceNode(
+              factory.createQualifiedName(
+                factory.createIdentifier("dto"),
+                factory.createIdentifier(snakeToPascal(tableName)),
+              ),
             ),
-            undefined,
-          ),
+            factory.createIndexedAccessTypeNode(
+              factory.createTypeReferenceNode("K", undefined),
+              factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
+            ),
+          ]),
         ),
       ]),
       factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
       ts.factory.createBlock(
         [
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                factory.createVariableDeclaration(
+                  "allColumns",
+                  undefined,
+                  undefined,
+                  factory.createArrayLiteralExpression(
+                    columns
+                      .filter(excludedFilter)
+                      .map((column) =>
+                        factory.createStringLiteral(column.name),
+                      ),
+                  ),
+                ),
+              ],
+              ts.NodeFlags.Const,
+            ),
+          ),
           // Get the select clause
           factory.createVariableStatement(
             undefined,
@@ -845,24 +894,17 @@ function getSelectMethod(table: Table) {
                   "columnClause",
                   undefined,
                   undefined,
-                  factory.createConditionalExpression(
-                    factory.createBinaryExpression(
-                      factory.createIdentifier("columns"),
-                      ts.SyntaxKind.ExclamationEqualsEqualsToken,
-                      factory.createIdentifier("undefined"),
-                    ),
-                    factory.createToken(ts.SyntaxKind.QuestionToken),
-                    factory.createCallExpression(
-                      factory.createPropertyAccessExpression(
+                  factory.createCallExpression(
+                    factory.createPropertyAccessExpression(
+                      factory.createBinaryExpression(
                         factory.createIdentifier("columns"),
-                        "join",
+                        SyntaxKind.QuestionQuestionToken,
+                        factory.createIdentifier("allColumns"),
                       ),
-                      undefined,
-                      [factory.createStringLiteral(", ")],
+                      "join",
                     ),
-
-                    factory.createToken(ts.SyntaxKind.ColonToken),
-                    factory.createStringLiteral("*"),
+                    undefined,
+                    [factory.createStringLiteral(", ")],
                   ),
                 ),
               ],
@@ -1022,6 +1064,33 @@ function getSelectMethod(table: Table) {
               ),
             ),
           ]),
+          // array of bigint columns
+          factory.createVariableStatement(
+            undefined,
+            factory.createVariableDeclarationList(
+              [
+                factory.createVariableDeclaration(
+                  "bigIntColumns",
+                  undefined,
+                  undefined,
+                  // new Set([])
+                  factory.createNewExpression(
+                    factory.createIdentifier("Set"),
+                    undefined,
+                    [
+                      factory.createArrayLiteralExpression(
+                        columns
+                          .filter((col) => col.type?.name === "int8")
+                          .map((col) => factory.createStringLiteral(col.name)),
+                        true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              ts.NodeFlags.Const,
+            ),
+          ),
           factory.createReturnStatement(
             factory.createCallExpression(
               factory.createPropertyAccessExpression(
@@ -1050,10 +1119,167 @@ function getSelectMethod(table: Table) {
                   factory.createToken(SyntaxKind.EqualsGreaterThanToken),
                   factory.createBlock(
                     [
+                      // let index = 0;
+                      factory.createVariableStatement(
+                        undefined,
+                        factory.createVariableDeclarationList(
+                          [
+                            factory.createVariableDeclaration(
+                              "index",
+                              undefined,
+                              undefined,
+                              factory.createNumericLiteral("0"),
+                            ),
+                          ],
+                          ts.NodeFlags.Let,
+                        ),
+                      ),
                       factory.createReturnStatement(
-                        factory.createObjectLiteralExpression(
-                          columns.map(mapReturnColumnsWithBigInt),
-                          true,
+                        factory.createAsExpression(
+                          factory.createCallExpression(
+                            factory.createPropertyAccessExpression(
+                              // columns ?? Object.getOwnPropertyNames(dto.tablename.prototype)
+                              factory.createBinaryExpression(
+                                factory.createIdentifier("columns"),
+                                ts.SyntaxKind.QuestionQuestionToken,
+                                factory.createIdentifier("allColumns"),
+                              ),
+                              "reduce",
+                            ),
+                            undefined,
+                            [
+                              // The reduce function is:
+                              // (obj, column) => {
+                              //   obj[column] = bigIntColumns.has(column)
+                              //     ? BigInt(row[index++])
+                              //     : row[index++];
+                              //   return obj;
+                              // }, {}
+                              ts.factory.createArrowFunction(
+                                undefined,
+                                undefined,
+                                [
+                                  ts.factory.createParameterDeclaration(
+                                    undefined,
+                                    undefined,
+                                    "obj",
+                                  ),
+                                  ts.factory.createParameterDeclaration(
+                                    undefined,
+                                    undefined,
+                                    "column",
+                                  ),
+                                ],
+                                undefined,
+                                ts.factory.createToken(
+                                  ts.SyntaxKind.EqualsGreaterThanToken,
+                                ),
+                                ts.factory.createBlock(
+                                  [
+                                    // obj[column] = bigIntColumns.has(column)
+                                    //   ? BigInt(row[index++])
+                                    //   : row[index++];
+                                    ts.factory.createExpressionStatement(
+                                      ts.factory.createBinaryExpression(
+                                        ts.factory.createElementAccessExpression(
+                                          ts.factory.createIdentifier("obj"),
+                                          ts.factory.createIdentifier("column"),
+                                        ),
+                                        ts.SyntaxKind.EqualsToken,
+                                        ts.factory.createConditionalExpression(
+                                          factory.createBinaryExpression(
+                                            factory.createBinaryExpression(
+                                              // row[index] != null
+                                              factory.createElementAccessExpression(
+                                                factory.createIdentifier("row"),
+                                                factory.createIdentifier(
+                                                  "index",
+                                                ),
+                                              ),
+                                              ts.SyntaxKind
+                                                .ExclamationEqualsToken,
+                                              factory.createNull(),
+                                            ),
+                                            SyntaxKind.AmpersandAmpersandToken,
+                                            ts.factory.createCallExpression(
+                                              ts.factory.createPropertyAccessExpression(
+                                                ts.factory.createIdentifier(
+                                                  "bigIntColumns",
+                                                ),
+                                                "has",
+                                              ),
+                                              undefined,
+                                              [
+                                                ts.factory.createIdentifier(
+                                                  "column",
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          ts.factory.createToken(
+                                            ts.SyntaxKind.QuestionToken,
+                                          ),
+                                          ts.factory.createCallExpression(
+                                            ts.factory.createIdentifier(
+                                              "BigInt",
+                                            ),
+                                            undefined,
+                                            [
+                                              ts.factory.createElementAccessExpression(
+                                                ts.factory.createIdentifier(
+                                                  "row",
+                                                ),
+                                                ts.factory.createPostfixUnaryExpression(
+                                                  ts.factory.createIdentifier(
+                                                    "index",
+                                                  ),
+                                                  ts.SyntaxKind.PlusPlusToken,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          ts.factory.createToken(
+                                            ts.SyntaxKind.ColonToken,
+                                          ),
+                                          ts.factory.createElementAccessExpression(
+                                            ts.factory.createIdentifier("row"),
+                                            ts.factory.createPostfixUnaryExpression(
+                                              ts.factory.createIdentifier(
+                                                "index",
+                                              ),
+                                              ts.SyntaxKind.PlusPlusToken,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // return obj;
+                                    ts.factory.createReturnStatement(
+                                      ts.factory.createIdentifier("obj"),
+                                    ),
+                                  ],
+                                  true,
+                                ),
+                              ),
+                              factory.createObjectLiteralExpression([], false),
+                            ],
+                          ),
+                          factory.createTypeReferenceNode("Pick", [
+                            factory.createTypeReferenceNode(
+                              factory.createQualifiedName(
+                                factory.createIdentifier("dto"),
+                                factory.createIdentifier(
+                                  snakeToPascal(tableName),
+                                ),
+                              ),
+                            ),
+                            factory.createIndexedAccessTypeNode(
+                              factory.createTypeReferenceNode("K", undefined),
+                              factory.createKeywordTypeNode(
+                                SyntaxKind.NumberKeyword,
+                              ),
+                            ),
+                          ]),
                         ),
                       ),
                     ],
@@ -1740,7 +1966,22 @@ function selectArgumentsDecl(
   return factory.createClassDeclaration(
     [factory.createToken(SyntaxKind.ExportKeyword)],
     factory.createIdentifier(`${snakeToPascal(name)}SelectArgs`),
-    undefined,
+    [
+      factory.createTypeParameterDeclaration(
+        undefined,
+        factory.createIdentifier("K"),
+        factory.createArrayTypeNode(
+          factory.createTypeOperatorNode(
+            SyntaxKind.KeyOfKeyword,
+            factory.createTypeReferenceNode(
+              factory.createIdentifier(snakeToPascal(name)),
+              undefined,
+            ),
+          ),
+        ),
+        undefined,
+      ),
+    ],
     undefined,
     [
       factory.createPropertyDeclaration(
@@ -1762,13 +2003,8 @@ function selectArgumentsDecl(
           ]),
         ],
         factory.createIdentifier("columns"),
-        undefined,
-        factory.createArrayTypeNode(
-          factory.createTypeOperatorNode(
-            SyntaxKind.KeyOfKeyword,
-            factory.createTypeReferenceNode(snakeToPascal(name)),
-          ),
-        ),
+        factory.createToken(SyntaxKind.QuestionToken),
+        factory.createTypeReferenceNode(factory.createIdentifier("K")),
         undefined,
       ),
       factory.createPropertyDeclaration(
