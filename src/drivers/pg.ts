@@ -251,17 +251,11 @@ export class Driver {
         break;
       }
       case "time": {
-        typ = factory.createTypeReferenceNode(
-          factory.createIdentifier("Date"),
-          undefined
-        );
+        // string
         break;
       }
       case "timetz": {
-        typ = factory.createTypeReferenceNode(
-          factory.createIdentifier("Date"),
-          undefined
-        );
+       // string
         break;
       }
       case "timestamp": {
