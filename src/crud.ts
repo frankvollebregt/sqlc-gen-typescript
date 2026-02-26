@@ -306,8 +306,8 @@ function decoratorForTypeName(typeName: string, imports: Set<string>) {
       return "IsInt";
     case "timestamptz":
     case "timestamp":
-      imports.add("IsISO8601");
-      return "IsISO8601";
+      imports.add("IsDate");
+      return "IsDate";
     case "time":
       imports.add("IsMilitaryTime");
       return "IsMilitaryTime";
@@ -2107,7 +2107,7 @@ function filterDecl(
       );
 
       if (typeDecoratorName != null) {
-        if (["IsISO8601", "IsNumber", "IsUuid"].includes(typeDecoratorName)) {
+        if (["IsNumber", "IsUuid"].includes(typeDecoratorName)) {
           // Options is the second argument
           decorators.push(
             decoratorDecl(typeDecoratorName, [
