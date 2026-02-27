@@ -50,7 +50,12 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     ),
   );
 
-  nodes.push(createNamedImportDeclaration(["Injectable", "UnprocessableEntityException"], "@nestjs/common"));
+  nodes.push(
+    createNamedImportDeclaration(
+      ["Injectable", "UnprocessableEntityException"],
+      "@nestjs/common",
+    ),
+  );
   dtoNodes.push(
     createNamedImportDeclaration(
       ["PartialType", "OmitType"],
@@ -341,6 +346,21 @@ function columnDecoratorsDecl(
     if (decoratorName != null) {
       decorators.push(decoratorDecl(decoratorName));
     }
+    if (decoratorName === "IsDate") {
+      // Also add @Type(() => Date) for date columns
+      decorators.push(
+        decoratorDecl("Type", [
+          factory.createArrowFunction(
+            undefined,
+            undefined,
+            [],
+            undefined,
+            factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+            factory.createIdentifier("Date"),
+          ),
+        ]),
+      );
+    }
   }
 
   return decorators;
@@ -395,7 +415,8 @@ function insertableDecl(tableName: string, columns: Column[]) {
       ]),
     ],
     [
-      // Since Transforms are not supported in inheritance, we need to redeclare all bigint fields
+      // Since Transforms are not supported in inheritance, we need to redeclare
+      // all bigint fields
       ...columns
         .filter(excludedFilter)
         .filter(
@@ -412,6 +433,28 @@ function insertableDecl(tableName: string, columns: Column[]) {
               : // nullable
                 factory.createUnionTypeNode([
                   factory.createKeywordTypeNode(SyntaxKind.BigIntKeyword),
+                  factory.createLiteralTypeNode(factory.createNull()),
+                ]),
+            undefined,
+          ),
+        ),
+      // And all Date fields
+      ...columns
+        .filter(excludedFilter)
+        .filter((col) =>
+          ["timestamp", "timestamptz"].includes(col.type?.name ?? ""),
+        )
+        .map((col, i) =>
+          factory.createPropertyDeclaration(
+            columnDecoratorsDecl(col, new Set(), true),
+            factory.createIdentifier(colName(i, col)),
+            factory.createToken(SyntaxKind.QuestionToken),
+            // not-null
+            col.notNull
+              ? factory.createTypeReferenceNode("Date")
+              : // nullable
+                factory.createUnionTypeNode([
+                  factory.createTypeReferenceNode("Date"),
                   factory.createLiteralTypeNode(factory.createNull()),
                 ]),
             undefined,
