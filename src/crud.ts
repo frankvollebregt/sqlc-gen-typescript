@@ -1576,6 +1576,24 @@ function getInsertMethod(table: Table, insertableIdentifier: ts.Identifier) {
               ts.NodeFlags.Const,
             ),
           ),
+          ts.factory.createIfStatement(
+            ts.factory.createBinaryExpression(
+              ts.factory.createPropertyAccessExpression(
+                ts.factory.createIdentifier("arr"),
+                ts.factory.createIdentifier("length"),
+              ),
+              ts.factory.createToken(ts.SyntaxKind.EqualsEqualsEqualsToken),
+              ts.factory.createNumericLiteral(0),
+            ),
+            ts.factory.createBlock(
+              [
+                ts.factory.createReturnStatement(
+                  ts.factory.createArrayLiteralExpression([], false),
+                ),
+              ],
+              true,
+            ),
+          ),
           // const keys = Object.keys(arr[0]);
           ts.factory.createVariableStatement(
             undefined,
