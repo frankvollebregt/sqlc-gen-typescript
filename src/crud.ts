@@ -196,6 +196,37 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     ),
   );
 
+  // Enum for sort direction
+  dtoNodes.push(
+    ts.addSyntheticLeadingComment(
+      factory.createEnumDeclaration(
+        [factory.createToken(SyntaxKind.ExportKeyword)],
+        factory.createIdentifier("SortDirection"),
+        [
+          factory.createEnumMember(
+            factory.createIdentifier("ASC"),
+            factory.createStringLiteral("ASC"),
+          ),
+          factory.createEnumMember(
+            factory.createIdentifier("DESC"),
+            factory.createStringLiteral("DESC"),
+          ),
+          factory.createEnumMember(
+            factory.createIdentifier("asc"),
+            factory.createStringLiteral("asc"),
+          ),
+          factory.createEnumMember(
+            factory.createIdentifier("desc"),
+            factory.createStringLiteral("desc"),
+          ),
+        ],
+      ),
+      SyntaxKind.SingleLineCommentTrivia,
+      " TODO: Remove lower case options once no longer used by the front-end (RL-4360)",
+      true,
+    ),
+  );
+
   dtoNodes.push(
     factory.createClassDeclaration(
       [
