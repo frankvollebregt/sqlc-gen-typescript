@@ -94,7 +94,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
   );
 
   dtoNodes.push(
-    createNamedImportDeclaration(["Type"], "class-transformer-global-storage"),
+    createNamedImportDeclaration(["Type"], "class-transformer"),
   );
 
   dtoNodes.push(
