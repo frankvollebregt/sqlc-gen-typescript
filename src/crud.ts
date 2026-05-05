@@ -58,7 +58,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
   );
   dtoNodes.push(
     createNamedImportDeclaration(
-      ["PartialType", "OmitType"],
+      ["PartialType", "OmitType", "ApiProperty"],
       "@nestjs/swagger",
     ),
   );
@@ -226,6 +226,18 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
       [
         factory.createPropertyDeclaration(
           [
+            // @ApiProperty({ type: String })
+            decoratorDecl("ApiProperty", [
+              factory.createObjectLiteralExpression(
+                [
+                  factory.createPropertyAssignment(
+                    "type",
+                    factory.createIdentifier("String"),
+                  ),
+                ],
+                false,
+              ),
+            ]),
             decoratorDecl("IsDefined"),
             decoratorDecl("IsString"),
             factory.createToken(SyntaxKind.AbstractKeyword),
