@@ -66,6 +66,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
   const imports = new Set<string>([
     "IsDefined",
     "IsOptional",
+    "IsEnum",
     "IsIn",
     "Min",
     "IsArray",
@@ -182,20 +183,6 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     ),
   );
 
-  // General class for sorting
-  // type Direction = 'ASC' | 'DESC';
-  dtoNodes.push(
-    factory.createTypeAliasDeclaration(
-      undefined,
-      factory.createIdentifier("Direction"),
-      undefined,
-      factory.createUnionTypeNode([
-        factory.createLiteralTypeNode(factory.createStringLiteral("ASC")),
-        factory.createLiteralTypeNode(factory.createStringLiteral("DESC")),
-      ]),
-    ),
-  );
-
   // Enum for sort direction
   dtoNodes.push(
     ts.addSyntheticLeadingComment(
@@ -251,20 +238,14 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
         factory.createPropertyDeclaration(
           [
             decoratorDecl("IsOptional"),
-            decoratorDecl("IsIn", [
-              factory.createArrayLiteralExpression(
-                [
-                  factory.createStringLiteral("ASC"),
-                  factory.createStringLiteral("DESC"),
-                ],
-                false,
-              ),
+            decoratorDecl("IsEnum", [
+              factory.createIdentifier("SortDirection"),
             ]),
           ],
           factory.createIdentifier("direction"),
           factory.createToken(SyntaxKind.QuestionToken),
           factory.createTypeReferenceNode(
-            factory.createIdentifier("Direction"),
+            factory.createIdentifier("SortDirection"),
             undefined,
           ),
           undefined,
