@@ -14,7 +14,6 @@ import {
   snakeToPascal,
 } from "./nest";
 import { colName } from "./drivers/utlis";
-import { mapReturnColumnsWithBigInt } from "./bigint";
 
 const excludedColumns = [
   "userid",
@@ -69,6 +68,7 @@ export function crudDecl(driver: Driver, tables: Table[]): [Node[], Node[]] {
     "IsEnum",
     "IsIn",
     "Min",
+    "Max",
     "IsArray",
     "ArrayUnique",
     "ArrayMinSize",
