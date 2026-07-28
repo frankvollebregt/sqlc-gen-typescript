@@ -385,6 +385,25 @@ function columnDecoratorsDecl(
         ]),
       );
     }
+    if (decoratorName === "IsNumber") {
+      if (column.name === "breedtegraad") {
+        // Latitude should be between 35.3 and 72.2 (within Europe)
+        decorators.push(
+          decoratorDecl("Min", [factory.createNumericLiteral("35.3")]),
+        );
+        decorators.push(
+          decoratorDecl("Max", [factory.createNumericLiteral("72.2")]),
+        );
+      } else if (column.name === "lengtegraad") {
+        // Longitude should be between -10.6 and 46.8 (within Europe)
+        decorators.push(
+          decoratorDecl("Min", [factory.createNumericLiteral("-10.6")]),
+        );
+        decorators.push(
+          decoratorDecl("Max", [factory.createNumericLiteral("46.8")]),
+        );
+      }
+    }
   }
 
   return decorators;
